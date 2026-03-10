@@ -26,6 +26,7 @@ class TestResult:
     error_message: Optional[str] = None
     stack_trace: Optional[str] = None
     evidence_files: List[str] = field(default_factory=list)
+    raw_data: Optional[dict] = None  # Store raw test result data for TC ID extraction
 
 
 @dataclass
@@ -39,6 +40,7 @@ class Configuration:
     results_file: str
     result_type: Optional[str] = None
     mapping_file: Optional[str] = None
+    auto_create_test_cases: bool = True  # Auto-create missing test cases by default
 
 
 @dataclass

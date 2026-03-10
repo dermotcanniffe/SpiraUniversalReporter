@@ -4,11 +4,117 @@ Python-based CLI tool that parses test results from CI/CD pipelines and transmit
 
 ## Features
 
-- Parse JUnit XML (TestNG) and Allure JSON (Cypress) test results
-- Send test results to Spira via REST API
-- Attach evidence files (screenshots, videos, logs)
-- Secure credential management (CLI args or environment variables)
-- Pluggable parser architecture
+- **Automatic Format Detection** - Detects JUnit XML or Allure JSON automatically
+- **Smart Test Case Mapping** - Extracts TC IDs from test names (no mapping files needed)
+- **Auto-Create Test Cases** - Creates missing test cases in Spira automatically
+- **Parse Multiple Formats** - JUnit XML (TestNG) and Allure JSON (Cypress)
+- **Send Results to Spira** - Creates test runs via REST API with full details
+- **Attach Evidence Files** - Screenshots, videos, logs (coming soon)
+- **Secure Credentials** - CLI args or environment variables
+- **CI/CD Ready** - Works in any pipeline (GitHub Actions, GitLab CI, Jenkins)
+
+## Supported Test Result Formats
+
+### Automatic Format Detection
+
+The tool automatically detects the test result format using a two-step process:
+
+1. **File Extension Check**
+   - `.xml` files → Checks for JUnit XML format
+   - `.json` files → Checks for Allure JSON format
+
+2. **Content Validation**
+   - **JUnit XML**: Validates root element is `<testsuite>` or `<testsuites>`
+   - **Allure JSON**: Validates presence of `uuid` and `status` fields
+
+### Supported Formats
+
+#### Allure JSON (Cypress, Playwright, etc.)
+```json
+{
+  "uuid": "test-uuid-1",
+  "name": "User can login [TC:123]",
+  "status": "passed",
+  "start": 1234567890000,
+  "stop": 1234567892000
+}
+```
+
+**Detection criteria:**
+- File extension: `.json`
+- Required fields: `uuid`, `status`
+- Supports both single object and array of objects
+
+#### JUnit XML (TestNG, Maven Surefire, etc.)
+```xml
+<testsuite name="Test Suite">
+  <testcase name="User can login [TC:123]" time="2.5">
+    <failure message="Assertion failed">...</failure>
+  </testcase>
+</testsuite>
+```
+
+**Detection criteria:**
+- File extension: `.xml`
+- Root element: `<testsuite>` or `<testsuites>`
+
+### Manual Format Override
+
+If auto-detection fails or you want to be explicit:
+
+```bash
+# Via command line
+--result-type allure-json
+
+# Via environment variable
+SPIRA_RESULT_TYPE=allure-json
+```
+
+## Test Case Mapping
+
+### Automatic TC ID Extraction
+
+The tool automatically extracts Spira test case IDs from test names. No mapping files needed!
+
+**Supported formats:**
+- `[TC:123]` - Recommended (clear and visible)
+- `TC-123:` - Prefix style
+- `(TC:123)` - Parentheses style
+- `TC123` - Compact style
+
+**Example test names:**
+```json
+{
+  "name": "User can login successfully [TC:707]"
+}
+```
+
+```xml
+<testcase name="TC-708: User cannot login with invalid credentials">
+```
+
+**Also checks:**
+- Allure labels: `testCaseId` label
+- Test descriptions: Searches for TC patterns
+- Full test names: Checks complete test path
+
+### Auto-Create Missing Test Cases
+
+By default, the tool creates test cases in Spira if they don't exist:
+
+```bash
+# Enable (default)
+SPIRA_AUTO_CREATE_TEST_CASES=true
+
+# Disable
+SPIRA_AUTO_CREATE_TEST_CASES=false
+```
+
+When enabled:
+1. Tries to create test run with specified TC ID
+2. If TC doesn't exist (404 error), creates the test case automatically
+3. Then creates the test run with the new TC ID
+4. Logs the new TC ID for reference
 
 ## Installation
 

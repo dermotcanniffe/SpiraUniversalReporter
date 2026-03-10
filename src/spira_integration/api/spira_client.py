@@ -218,6 +218,77 @@ class SpiraAPIClient:
         except requests.exceptions.RequestException as e:
             raise APIError(f"Failed to create test run: {str(e)}")
     
+    def create_test_case(
+        self,
+        project_id: int,
+        test_case_name: str,
+        description: Optional[str] = None
+    ) -> int:
+        """
+        Create a new test case in Spira.
+        
+        Args:
+            project_id: Spira project ID
+            test_case_name: Name of the test case
+            description: Optional description
+            
+        Returns:
+            Test case ID
+            
+        Raises:
+            APIError: If API request fails
+        """
+        if not self._authenticated:
+            self.authenticate()
+        
+        endpoint = f'projects/{project_id}/test-cases'
+        url = self._build_url(endpoint)
+        
+        # Build request payload
+        payload = {
+            "Name": test_case_name,
+            "Description": description or f"Auto-created from test automation: {test_case_name}",
+            "TestCaseTypeId": 1,  # Manual test case type
+            "TestCaseStatusId": 3,  # Approved status
+            "TestCasePriorityId": 3,  # Medium priority
+            "OwnerId": None,  # Will use default
+            "AuthorId": None,  # Will use default
+            "ExecutionStatusId": 1  # Not Run
+        }
+        
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            response = self._session.post(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            if response.status_code == 429:
+                raise RateLimitError("Rate limit exceeded")
+            elif response.status_code not in (200, 201):
+                raise APIError(
+                    f"Failed to create test case: HTTP {response.status_code} - {response.text}"
+                )
+            
+            # Parse response to get test case ID
+            response_data = response.json()
+            test_case_id = response_data.get('TestCaseId')
+            
+            if test_case_id:
+                logger.info(f"Created test case ID: {test_case_id} - {test_case_name}")
+            
+            return test_case_id
+            
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"Failed to create test case: {str(e)}")
+    
     def upload_evidence(
         self,
         project_id: int,

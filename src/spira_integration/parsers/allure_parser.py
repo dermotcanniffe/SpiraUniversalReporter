@@ -87,7 +87,8 @@ class AllureParser(TestResultParser):
                 end_time=stop_time,
                 error_message=error_message,
                 stack_trace=stack_trace,
-                evidence_files=evidence_files
+                evidence_files=evidence_files,
+                raw_data=result  # Store raw data for TC ID extraction
             )
         except Exception as e:
             raise ParseError(f"Failed to parse test result: {e}")
