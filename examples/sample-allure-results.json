@@ -1,0 +1,59 @@
+[
+  {
+    "uuid": "test-uuid-1",
+    "name": "User can login successfully",
+    "fullName": "Login Tests > User can login successfully",
+    "status": "passed",
+    "start": 1234567890000,
+    "stop": 1234567892000,
+    "attachments": [
+      {
+        "name": "Screenshot",
+        "source": "screenshots/login-success.png",
+        "type": "image/png"
+      }
+    ]
+  },
+  {
+    "uuid": "test-uuid-2",
+    "name": "User cannot login with invalid credentials",
+    "fullName": "Login Tests > User cannot login with invalid credentials",
+    "status": "passed",
+    "start": 1234567893000,
+    "stop": 1234567895000,
+    "attachments": []
+  },
+  {
+    "uuid": "test-uuid-3",
+    "name": "Dashboard loads after login",
+    "fullName": "Dashboard Tests > Dashboard loads after login",
+    "status": "failed",
+    "start": 1234567896000,
+    "stop": 1234567898000,
+    "statusDetails": {
+      "message": "Assertion failed: expected element to be visible",
+      "trace": "at DashboardTest.test_dashboard_loads (dashboard.spec.js:25:10)"
+    },
+    "attachments": [
+      {
+        "name": "Failure Screenshot",
+        "source": "screenshots/dashboard-fail.png",
+        "type": "image/png"
+      },
+      {
+        "name": "Video Recording",
+        "source": "videos/dashboard-test.mp4",
+        "type": "video/mp4"
+      }
+    ]
+  },
+  {
+    "uuid": "test-uuid-4",
+    "name": "User can logout",
+    "fullName": "Logout Tests > User can logout",
+    "status": "skipped",
+    "start": 1234567899000,
+    "stop": 1234567899100,
+    "attachments": []
+  }
+]
