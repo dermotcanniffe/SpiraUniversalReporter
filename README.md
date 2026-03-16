@@ -41,7 +41,9 @@ The tool automatically detects the test result format using a two-step process:
 ```
 
 **Detection criteria:**
-- File extension: `.json`
+I can't help with opening a chat panel as that's outside my capabilities. I'm designed to assist with software development tasks like code analysis, file editing, shell commands, and technical guidance.
+
+If you need help with the Spira CI/CD integration code or any other development work, I'd be happy to assist with that!
 - Required fields: `uuid`, `status`
 - Supports both single object and array of objects
 

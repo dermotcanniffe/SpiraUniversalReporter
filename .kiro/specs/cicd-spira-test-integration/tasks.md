@@ -19,14 +19,16 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - Implement argument parser using argparse
     - Implement environment variable reader
     - Implement priority logic (CLI overrides env vars)
-    - _Requirements: 2.1-2.8_
+    - Add release_id parameter (required)
+    - Add auto_create_test_sets parameter (optional, default: true)
+    - _Requirements: 2.1-2.11_
   
   - [x] 2.2 Implement configuration validation
     - Validate required parameters are present
     - Validate URL format for Spira instance
     - Validate file paths exist
     - Raise ConfigurationError with descriptive messages for missing/invalid config
-    - _Requirements: 2.9_
+    - _Requirements: 2.11_
   
   - [x] 2.3 Implement credential masking for logging
     - Mask API key values (show only first 4 characters)
@@ -61,8 +63,8 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - Test error handling for unsupported formats
     - _Requirements: 4.1-4.3, 5.1-5.4_
 
-- [ ] 4. Implement JUnit XML Parser
-  - [ ] 4.1 Create JUnitParser class implementing TestResultParser interface
+- [x] 4. Implement JUnit XML Parser
+  - [x] 4.1 Create JUnitParser class implementing TestResultParser interface
     - Implement parse() method using xml.etree.ElementTree
     - Handle both single testsuite and multiple testsuites root elements
     - Extract test case name, status, duration, timestamps
@@ -70,12 +72,12 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - Map status to TestStatus enum (pass/fail/skip)
     - _Requirements: 7.1-7.7_
   
-  - [ ] 4.2 Implement evidence file extraction from JUnit XML
+  - [x] 4.2 Implement evidence file extraction from JUnit XML
     - Parse system-out and system-err for EVIDENCE: patterns
     - Extract file paths from custom patterns
     - _Requirements: 7.7, 9.4_
   
-  - [ ] 4.3 Implement format validation for JUnit XML
+  - [x] 4.3 Implement format validation for JUnit XML
     - Validate XML structure
     - Raise descriptive error for invalid XML
     - _Requirements: 7.2_
@@ -147,22 +149,43 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - Raise error with HTTP status and message on auth failure
     - _Requirements: 11.1-11.4_
   
-  - [ ] 8.2 Implement create_test_run() method
-    - Build POST request to /projects/{project_id}/test-sets/{test_set_id}/test-runs
+  - [ ] 8.2 Implement validate_release() method
+    - Build GET request to /projects/{project_id}/releases/{release_id}
+    - Verify release exists in project
+    - Raise error with descriptive message if release not found
+    - Log release name on success
+    - _Requirements: 12b.1-12b.4_
+  
+  - [ ] 8.3 Implement create_or_get_test_set() method
+    - Build GET request to /projects/{project_id}/test-sets/{test_set_id}
+    - If test set exists, return test_set_id
+    - If test set does not exist and auto_create_test_sets is true, create it
+    - Build POST request to /projects/{project_id}/test-sets
+    - Include release_id if configured
+    - Parse response and extract test set ID
+    - Raise error if auto_create_test_sets is false and test set doesn't exist
+    - Log test set ID on success
+    - _Requirements: 12a.1-12a.6_
+  
+  - [ ] 8.4 Implement create_test_run() method
+    - Build POST request to /projects/{project_id}/test-runs/record
     - Include test case ID, execution status, timestamps, error message
+    - Include release_id if configured
     - Set Content-Type: application/json
     - Parse response and extract test run ID
     - Raise error with HTTP status on API failure
     - Log test run ID on success
-    - _Requirements: 12.1-12.6_
+    - _Requirements: 12.1-12.7_
   
-  - [ ]* 8.3 Write unit tests for Spira API Client (using mocks)
+  - [ ]* 8.5 Write unit tests for Spira API Client (using mocks)
     - Test authentication with valid credentials
     - Test authentication failure handling
+    - Test release validation
+    - Test test set creation and retrieval
     - Test create_test_run with valid data
     - Test API error response handling
     - Test URL validation
-    - _Requirements: 11.1-11.4, 12.1-12.6_
+    - _Requirements: 11.1-11.4, 12.1-12.7, 12a.1-12a.6, 12b.1-12b.4_
 
 - [ ] 9. Implement Rate Limit Handler
   - [ ] 9.1 Add rate limiting logic to Spira API Client
@@ -292,6 +315,26 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - Run full test suite (unit tests, integration tests, Cucumber tests)
     - Verify exit codes and error handling
     - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 16. Automatic TC Matching via Spira Custom Property
+  - [ ] 16.1 Implement Spira custom property lookup for test case matching
+    - Extract stable test identifier from results (Allure `testCaseId` hash, JUnit classname.name, etc.)
+    - Query Spira for Test Cases where custom property `AutomationTestCaseId` matches the identifier
+    - If match found, use that TC ID for the test run
+    - If no match found and auto-create enabled, create TC and set the custom property
+    - This replaces the need for TC IDs embedded in test names or local mapping files
+    - _Prerequisite: Custom property `AutomationTestCaseId` (text) configured on Test Case artifact in Spira_
+  
+  - [ ] 16.2 Implement Spira test case search by custom property
+    - Build GET request to search test cases with filter on custom property value
+    - Handle pagination if project has many test cases
+    - Cache results per run to avoid repeated API calls for the same identifier
+    - Fall back to name-based matching if custom property not configured
+  
+  - [ ] 16.3 Update auto-create to populate custom property
+    - When creating a new test case, include the automation identifier as the custom property value
+    - Ensure subsequent runs can find the TC via the custom property lookup
+    - Support configurable custom property field name via env var (SPIRA_AUTOMATION_ID_FIELD)
 
 ## Notes
 

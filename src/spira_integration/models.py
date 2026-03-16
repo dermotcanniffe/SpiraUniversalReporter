@@ -35,12 +35,15 @@ class Configuration:
     spira_url: str
     project_id: str
     test_set_id: str
+    release_id: str
     username: str
     api_key: str
     results_file: str
     result_type: Optional[str] = None
     mapping_file: Optional[str] = None
     auto_create_test_cases: bool = True  # Auto-create missing test cases by default
+    auto_create_test_sets: bool = True  # Auto-create missing test sets by default
+    automation_id_field: Optional[str] = None  # Spira custom property field name for automation test case ID (e.g. Custom_04)
 
 
 @dataclass

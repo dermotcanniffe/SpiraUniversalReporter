@@ -43,12 +43,14 @@ This document specifies requirements for a Python-based CI/CD integration tool t
 1. THE Configuration_Manager SHALL accept Spira instance URL via command line argument or environment variable
 2. THE Configuration_Manager SHALL accept Spira project identifier via command line argument or environment variable
 3. THE Configuration_Manager SHALL accept Spira test set identifier via command line argument or environment variable
-4. THE Configuration_Manager SHALL accept Spira username via command line argument or environment variable
-5. THE Configuration_Manager SHALL accept API_Key via command line argument or environment variable
-6. THE Configuration_Manager SHALL accept test results file path via command line argument or environment variable
-7. THE Configuration_Manager SHALL accept Result_Type via command line argument or environment variable
-8. WHEN both command line argument and environment variable are provided for the same parameter, THE Configuration_Manager SHALL use the command line argument value
-9. WHEN a required configuration parameter is missing, THE Configuration_Manager SHALL raise an error with a descriptive message
+4. THE Configuration_Manager SHALL accept Spira release identifier via command line argument or environment variable
+5. THE Configuration_Manager SHALL accept Spira username via command line argument or environment variable
+6. THE Configuration_Manager SHALL accept API_Key via command line argument or environment variable
+7. THE Configuration_Manager SHALL accept test results file path via command line argument or environment variable
+8. THE Configuration_Manager SHALL accept Result_Type via command line argument or environment variable
+9. THE Configuration_Manager SHALL accept auto_create_test_sets flag via command line argument or environment variable
+10. WHEN both command line argument and environment variable are provided for the same parameter, THE Configuration_Manager SHALL use the command line argument value
+11. WHEN a required configuration parameter is missing, THE Configuration_Manager SHALL raise an error with a descriptive message
 
 ### Requirement 3: Secure Credential Handling
 
@@ -189,8 +191,33 @@ This document specifies requirements for a Python-based CI/CD integration tool t
 2. THE Spira_API_Client SHALL send Test_Run records to the specified Test_Set in the specified project
 3. THE Spira_API_Client SHALL include test execution status in each Test_Run record
 4. THE Spira_API_Client SHALL include execution timestamp in each Test_Run record
-5. WHEN the Spira API returns an error response, THE Spira_API_Client SHALL raise an error with the HTTP status code and response message
-6. WHEN a Test_Run is successfully created, THE Spira_API_Client SHALL log the Test_Run identifier
+5. THE Spira_API_Client SHALL include release identifier in each Test_Run record when configured
+6. WHEN the Spira API returns an error response, THE Spira_API_Client SHALL raise an error with the HTTP status code and response message
+7. WHEN a Test_Run is successfully created, THE Spira_API_Client SHALL log the Test_Run identifier
+
+### Requirement 12a: Auto-Create Test Sets
+
+**User Story:** As a DevOps engineer, I want test sets to be automatically created if they don't exist, so that I can run tests without manual setup in Spira.
+
+#### Acceptance Criteria
+
+1. WHEN auto_create_test_sets is enabled and a Test_Set does not exist, THE Spira_API_Client SHALL create the Test_Set
+2. THE Spira_API_Client SHALL verify Test_Set existence before creating test runs
+3. WHEN creating a Test_Set, THE Spira_API_Client SHALL use the configured release identifier if provided
+4. WHEN Test_Set creation fails, THE Spira_API_Client SHALL raise an error with the HTTP status code and response message
+5. WHEN a Test_Set is successfully created, THE Spira_API_Client SHALL log the Test_Set identifier
+6. WHEN auto_create_test_sets is disabled and Test_Set does not exist, THE Spira_API_Client SHALL raise an error
+
+### Requirement 12b: Release Validation
+
+**User Story:** As a test manager, I want the script to validate that the specified release exists, so that test runs are associated with the correct release.
+
+#### Acceptance Criteria
+
+1. WHEN a release identifier is configured, THE Spira_API_Client SHALL verify the release exists in the project
+2. WHEN the release does not exist, THE Spira_API_Client SHALL raise an error with a descriptive message
+3. THE Spira_API_Client SHALL NOT attempt to create releases (releases are managed at a higher level)
+4. WHEN release validation fails, THE Integration_Script SHALL exit with a non-zero status code
 
 ### Requirement 13: Attach Evidence to Test Runs
 

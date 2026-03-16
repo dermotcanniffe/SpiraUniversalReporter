@@ -47,12 +47,16 @@ def main():
     api_key = os.getenv('SPIRA_API_KEY')
     project_id = int(os.getenv('SPIRA_PROJECT_ID', '1'))
     test_set_id = int(os.getenv('SPIRA_TEST_SET_ID', '1'))
+    release_id = int(os.getenv('SPIRA_RELEASE_ID', '1'))
     results_file = os.getenv('SPIRA_RESULTS_FILE', 'examples/sample-allure-results.json')
+    auto_create_test_sets = os.getenv('SPIRA_AUTO_CREATE_TEST_SETS', 'true').lower() in ('true', '1', 'yes')
     
     print(f"Configuration:")
     print(f"  Spira URL: {spira_url}")
     print(f"  Project ID: {project_id}")
     print(f"  Test Set ID: {test_set_id}")
+    print(f"  Release ID: {release_id}")
+    print(f"  Auto-create Test Sets: {auto_create_test_sets}")
     print(f"  Results File: {results_file}")
     print()
     
@@ -109,8 +113,35 @@ def main():
         print(f"  ❌ Failed to connect: {e}\n")
         return 1
     
-    # Step 4: Send test runs to Spira
-    print("Step 4: Creating test runs in Spira...")
+    # Step 4: Validate release
+    print("Step 4: Validating release...")
+    print("-" * 70)
+    
+    try:
+        release_data = client.validate_release(project_id, release_id)
+        print(f"  ✓ Release validated: {release_data.get('Name', 'Unknown')}\n")
+    except APIError as e:
+        print(f"  ❌ Release validation failed: {e}\n")
+        return 1
+    
+    # Step 5: Ensure test set exists
+    print("Step 5: Checking test set...")
+    print("-" * 70)
+    
+    try:
+        test_set_id = client.create_or_get_test_set(
+            project_id=project_id,
+            test_set_id=test_set_id,
+            release_id=release_id,
+            auto_create=auto_create_test_sets
+        )
+        print(f"  ✓ Test set ready: {test_set_id}\n")
+    except APIError as e:
+        print(f"  ❌ Test set check failed: {e}\n")
+        return 1
+    
+    # Step 6: Send test runs to Spira
+    print("Step 6: Creating test runs in Spira...")
     print("-" * 70)
     
     summary = ExecutionSummary()

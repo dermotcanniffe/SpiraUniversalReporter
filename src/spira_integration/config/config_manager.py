@@ -38,11 +38,15 @@ class ConfigurationManager:
             'spira_url': self._get_value('url', args),
             'project_id': self._get_value('project_id', args),
             'test_set_id': self._get_value('test_set_id', args),
+            'release_id': self._get_value('release_id', args),
             'username': self._get_value('username', args),
             'api_key': self._get_value('api_key', args),
             'results_file': self._get_value('results_file', args),
             'result_type': self._get_value('result_type', args, required=False),
             'mapping_file': self._get_value('mapping_file', args, required=False),
+            'auto_create_test_cases': self._get_bool_value('auto_create_test_cases', args, default=True),
+            'auto_create_test_sets': self._get_bool_value('auto_create_test_sets', args, default=True),
+            'automation_id_field': self._get_value('automation_id_field', args, required=False),
         }
         
         self._config = Configuration(**config_dict)
@@ -95,6 +99,34 @@ class ConfigurationManager:
             )
         
         return None
+    
+    def _get_bool_value(self, param: str, args: argparse.Namespace, default: bool = False) -> bool:
+        """
+        Get boolean configuration value with priority: CLI args > env vars > default.
+        
+        Args:
+            param: Parameter name
+            args: Parsed CLI arguments
+            default: Default value if not provided
+            
+        Returns:
+            Boolean configuration value
+        """
+        # Try CLI argument first
+        cli_value = getattr(args, param, None)
+        if cli_value is not None:
+            if isinstance(cli_value, bool):
+                return cli_value
+            # Handle string values from CLI
+            return str(cli_value).lower() in ('true', '1', 'yes', 'on')
+        
+        # Try environment variable
+        env_key = f"{self.ENV_PREFIX}{param.upper()}"
+        env_value = os.environ.get(env_key)
+        if env_value is not None:
+            return env_value.lower() in ('true', '1', 'yes', 'on')
+        
+        return default
     
     def validate(self) -> None:
         """
@@ -181,11 +213,15 @@ class ConfigurationManager:
             'spira_url': self._config.spira_url,
             'project_id': self._config.project_id,
             'test_set_id': self._config.test_set_id,
+            'release_id': self._config.release_id,
             'username': self._config.username,
             'api_key': self.mask_sensitive_value(self._config.api_key),
             'results_file': self._config.results_file,
             'result_type': self._config.result_type,
             'mapping_file': self._config.mapping_file,
+            'auto_create_test_cases': self._config.auto_create_test_cases,
+            'auto_create_test_sets': self._config.auto_create_test_sets,
+            'automation_id_field': self._config.automation_id_field,
         }
     
     @property
@@ -227,6 +263,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
+        '--release-id',
+        dest='release_id',
+        help='Spira release identifier (or set SPIRA_RELEASE_ID env var)'
+    )
+    
+    parser.add_argument(
         '--username',
         help='Spira username (or set SPIRA_USERNAME env var)'
     )
@@ -254,6 +296,28 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--mapping-file',
         dest='mapping_file',
         help='Path to test case mapping file (or set SPIRA_MAPPING_FILE env var)'
+    )
+    
+    parser.add_argument(
+        '--auto-create-test-cases',
+        dest='auto_create_test_cases',
+        action='store_true',
+        default=None,
+        help='Auto-create test cases if they don\'t exist (or set SPIRA_AUTO_CREATE_TEST_CASES env var)'
+    )
+    
+    parser.add_argument(
+        '--auto-create-test-sets',
+        dest='auto_create_test_sets',
+        action='store_true',
+        default=None,
+        help='Auto-create test sets if they don\'t exist (or set SPIRA_AUTO_CREATE_TEST_SETS env var)'
+    )
+    
+    parser.add_argument(
+        '--automation-id-field',
+        dest='automation_id_field',
+        help='Spira custom property field name for automation test case ID, e.g. Custom_04 (or set SPIRA_AUTOMATION_ID_FIELD env var)'
     )
     
     return parser

@@ -129,6 +129,194 @@ class SpiraAPIClient:
             
         except requests.exceptions.RequestException as e:
             raise AuthenticationError(f"Authentication failed: {str(e)}")
+    def validate_release(self, project_id: int, release_id: int) -> dict:
+        """
+        Validate that a release exists in the project.
+
+        Args:
+            project_id: Spira project ID
+            release_id: Spira release ID
+
+        Returns:
+            Release information dictionary
+
+        Raises:
+            APIError: If release does not exist or validation fails
+        """
+        if not self._authenticated:
+            self.authenticate()
+
+        endpoint = f'projects/{project_id}/releases/{release_id}'
+        url = self._build_url(endpoint)
+
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = self._session.get(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                timeout=30
+            )
+
+            if response.status_code == 404:
+                raise APIError(
+                    f"Release ID {release_id} not found in project {project_id}. "
+                    f"Releases cannot be auto-created - please create the release in Spira first."
+                )
+            elif response.status_code != 200:
+                raise APIError(
+                    f"Failed to validate release: HTTP {response.status_code} - {response.text}"
+                )
+
+            release_data = response.json()
+            release_name = release_data.get('Name', 'Unknown')
+            logger.info(f"Validated release ID {release_id}: {release_name}")
+
+            return release_data
+
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"Failed to validate release: {str(e)}")
+
+    def create_or_get_test_set(
+        self,
+        project_id: int,
+        test_set_id: int,
+        release_id: Optional[int] = None,
+        auto_create: bool = True
+    ) -> int:
+        """
+        Get test set if it exists, or create it if auto_create is enabled.
+
+        Args:
+            project_id: Spira project ID
+            test_set_id: Spira test set ID
+            release_id: Optional release ID to associate with test set
+            auto_create: Whether to auto-create test set if it doesn't exist
+
+        Returns:
+            Test set ID
+
+        Raises:
+            APIError: If test set doesn't exist and auto_create is False, or creation fails
+        """
+        if not self._authenticated:
+            self.authenticate()
+
+        # Try to get existing test set
+        endpoint = f'projects/{project_id}/test-sets/{test_set_id}'
+        url = self._build_url(endpoint)
+
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = self._session.get(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                # Test set exists
+                test_set_data = response.json()
+                test_set_name = test_set_data.get('Name', 'Unknown')
+                logger.info(f"Found existing test set ID {test_set_id}: {test_set_name}")
+                return test_set_id
+
+            elif response.status_code == 404:
+                # Test set doesn't exist
+                if not auto_create:
+                    raise APIError(
+                        f"Test set ID {test_set_id} not found in project {project_id} "
+                        f"and auto-create is disabled."
+                    )
+
+                # Create new test set
+                logger.info(f"Test set ID {test_set_id} not found, creating new test set...")
+                return self._create_test_set(project_id, test_set_id, release_id)
+
+            else:
+                raise APIError(
+                    f"Failed to check test set: HTTP {response.status_code} - {response.text}"
+                )
+
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"Failed to check test set: {str(e)}")
+
+    def _create_test_set(
+        self,
+        project_id: int,
+        test_set_id: int,
+        release_id: Optional[int] = None
+    ) -> int:
+        """
+        Create a new test set in Spira.
+
+        Args:
+            project_id: Spira project ID
+            test_set_id: Desired test set ID
+            release_id: Optional release ID
+
+        Returns:
+            Created test set ID
+
+        Raises:
+            APIError: If creation fails
+        """
+        endpoint = f'projects/{project_id}/test-sets'
+        url = self._build_url(endpoint)
+
+        from datetime import datetime
+
+        payload = {
+            "Name": f"Automated Test Set {test_set_id}",
+            "Description": f"Auto-created test set from CI/CD integration at {datetime.now().isoformat()}",
+            "TestSetStatusId": 1,  # Not Started
+            "AutomationHostId": None,
+            "PlannedDate": None,
+            "CreatorId": None,
+            "OwnerId": None,
+        }
+
+        if release_id:
+            payload["ReleaseId"] = release_id
+
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = self._session.post(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            if response.status_code not in (200, 201):
+                raise APIError(
+                    f"Failed to create test set: HTTP {response.status_code} - {response.text}"
+                )
+
+            response_data = response.json()
+            created_test_set_id = response_data.get('TestSetId')
+
+            if created_test_set_id:
+                logger.info(f"Created test set ID: {created_test_set_id}")
+
+            return created_test_set_id
+
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"Failed to create test set: {str(e)}")
     
     def create_test_run(
         self,

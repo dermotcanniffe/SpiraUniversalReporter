@@ -115,15 +115,20 @@ class AllureParser(TestResultParser):
             return None
     
     def _extract_evidence(self, result: dict, results_dir: Path) -> List[str]:
-        """Extract evidence file paths from attachments."""
+        """Extract evidence file paths from attachments, walking steps recursively."""
         evidence_files = []
-        attachments = result.get('attachments', [])
-        
-        for attachment in attachments:
+        self._collect_attachments(result, results_dir, evidence_files)
+        return evidence_files
+
+    def _collect_attachments(
+        self, node: dict, results_dir: Path, evidence_files: List[str]
+    ) -> None:
+        """Recursively collect attachments from a node and its steps."""
+        for attachment in node.get('attachments', []):
             source = attachment.get('source')
             if source:
-                # Resolve relative path against results directory
                 evidence_path = results_dir / source
                 evidence_files.append(str(evidence_path))
-        
-        return evidence_files
+
+        for step in node.get('steps', []):
+            self._collect_attachments(step, results_dir, evidence_files)
