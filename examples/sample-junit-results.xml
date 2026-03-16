@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="TestNG Suite" tests="5" failures="1" errors="0" skipped="1"
+    time="8.234" timestamp="2025-03-16T10:30:00">
+  <testsuite name="com.example.LoginTests" tests="3" failures="1" errors="0"
+      skipped="0" time="5.125" timestamp="2025-03-16T10:30:00">
+    <testcase name="testLoginSuccess [TC:707]"
+        classname="com.example.LoginTests" time="2.100">
+      <system-out>
+Login test completed successfully
+EVIDENCE: screenshots/login-success.png
+      </system-out>
+    </testcase>
+    <testcase name="TC-708: testLoginInvalidCredentials"
+        classname="com.example.LoginTests" time="1.525">
+    </testcase>
+    <testcase name="testLoginTimeout (TC:711)"
+        classname="com.example.LoginTests" time="1.500">
+      <failure message="Expected response within 5s but timed out"
+          type="java.lang.AssertionError">
+java.lang.AssertionError: Expected response within 5s but timed out
+    at com.example.LoginTests.testLoginTimeout(LoginTests.java:45)
+    at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+      </failure>
+      <system-out>
+EVIDENCE: screenshots/login-timeout.png
+EVIDENCE: videos/login-timeout.mp4
+      </system-out>
+    </testcase>
+  </testsuite>
+  <testsuite name="com.example.DashboardTests" tests="2" failures="0" errors="0"
+      skipped="1" time="3.109" timestamp="2025-03-16T10:30:06">
+    <testcase name="testDashboardLoads"
+        classname="com.example.DashboardTests" time="2.200">
+      <properties>
+        <property name="testCaseId" value="709" />
+      </properties>
+    </testcase>
+    <testcase name="testDashboardExport"
+        classname="com.example.DashboardTests" time="0.909">
+      <skipped message="Export feature not yet implemented" />
+    </testcase>
+  </testsuite>
+</testsuites>
