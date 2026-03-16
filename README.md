@@ -13,6 +13,50 @@ Python-based CLI tool that parses test results from CI/CD pipelines and transmit
 - **Secure Credentials** - CLI args or environment variables
 - **CI/CD Ready** - Works in any pipeline (GitHub Actions, GitLab CI, Jenkins)
 
+## How It Works
+
+```mermaid
+flowchart TD
+    A[CI/CD Pipeline Runs Tests] --> B[Test Results Generated]
+    B --> C{Detect Format}
+    C -->|.xml| D[JUnit XML Parser]
+    C -->|.json| E[Allure JSON Parser]
+    
+    D --> F[Extract Test Results & Evidence Paths]
+    E --> F
+    
+    F --> G[For Each Test Result]
+    G --> H[Extract Stable Test ID]
+    H --> I{Search Spira Custom Property}
+    
+    I -->|Match Found| J[Use Existing TC ID]
+    I -->|No Match| K{Auto-Create Enabled?}
+    
+    K -->|Yes| L[Create TC in Spira\nSet Custom Property with Hash]
+    K -->|No| M[Skip / Log Warning]
+    
+    L --> N[Create Test Run in Spira]
+    J --> N
+    
+    N --> O{Evidence Files?}
+    O -->|Yes| P[Upload Screenshots / Videos / Logs]
+    O -->|No| Q[Next Test Result]
+    P --> Q
+    
+    Q --> G
+    
+    style A fill:#2d6a4f,color:#fff
+    style N fill:#1d3557,color:#fff
+    style L fill:#e76f51,color:#fff
+    style J fill:#264653,color:#fff
+```
+
+The tool is fully stateless — no local mapping files, no repo commits. It's cloned fresh each pipeline run and uses Spira as the single source of truth for test case matching via a configurable custom property (e.g. `Custom_04`).
+
+## Supported Test Result Formatsrgs or environment variables
+- **CI/CD Ready** - Works in any pipeline (GitHub Actions, GitLab CI, Jenkins)
+
+
 ## Supported Test Result Formats
 
 ### Automatic Format Detection
