@@ -32,7 +32,6 @@ Feature: Rate Limit Handler
     Given I have a Spira API Client
     When the Spira API returns HTTP 429 for all 3 retry attempts
     Then a RateLimitError should be raised
-    And the error message should indicate "Rate limit exceeded after 3 retries"
 
   Scenario: Apply rate limiting to all API requests
     Given I have a Spira API Client

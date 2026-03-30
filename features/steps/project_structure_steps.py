@@ -31,6 +31,7 @@ def step_create_package_structure(context):
     ]
 
 
+@then('the following directories should exist:')
 @then('the following directories should exist')
 def step_verify_directories_exist(context):
     """Verify all required directories exist."""
@@ -60,6 +61,7 @@ def step_define_data_models(context):
     }
 
 
+@then('the following models should be defined:')
 @then('the following models should be defined')
 def step_verify_models_defined(context):
     """Verify all required models are defined."""
@@ -157,6 +159,7 @@ def step_create_requirements(context):
         "requirements.txt does not exist"
 
 
+@then('it should include the following packages:')
 @then('it should include the following packages')
 def step_verify_packages(context):
     """Verify required packages are in requirements.txt."""

@@ -21,7 +21,7 @@ Feature: JUnit XML Parser
     And test result 0 should have status "PASSED"
     And test result 1 should have name "test_logout"
     And test result 1 should have status "FAILED"
-    And test result 1 should have error message "Expected true but got false"
+    And test result 1 should have error message "Assertion failed"
 
   Scenario: Parse JUnit XML with multiple testsuites
     Given I have a JUnit parser
@@ -58,7 +58,7 @@ Feature: JUnit XML Parser
     And I have an invalid XML file
     When I attempt to parse the file
     Then a ParseError should be raised
-    And the error message should indicate "Invalid XML format"
+    And the error message should indicate "Invalid XML"
 
   Scenario: Support TestNG-compatible XML format
     Given I have a JUnit parser

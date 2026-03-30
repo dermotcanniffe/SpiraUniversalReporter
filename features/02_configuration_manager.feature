@@ -13,10 +13,11 @@ Feature: Configuration Manager
       | --username    | testuser                        |
       | --api-key     | secret123                       |
       | --results-file| /path/to/results.xml            |
+      | --release-id  | 1                               |
       | --result-type | junit-xml                       |
     Then the configuration should be loaded successfully
-    And the spira_url should be "https://spira.example.com"
-    And the project_id should be "123"
+    And the config spira_url should be "https://spira.example.com"
+    And the config project_id should be "123"
 
   Scenario: Load configuration from environment variables
     Given I have a configuration manager
@@ -28,15 +29,16 @@ Feature: Configuration Manager
       | SPIRA_USERNAME        | testuser                        |
       | SPIRA_API_KEY         | secret123                       |
       | SPIRA_RESULTS_FILE    | /path/to/results.xml            |
+      | SPIRA_RELEASE_ID      | 1                               |
       | SPIRA_RESULT_TYPE     | junit-xml                       |
     Then the configuration should be loaded successfully
-    And the spira_url should be "https://spira.example.com"
+    And the config spira_url should be "https://spira.example.com"
 
   Scenario: CLI arguments override environment variables
     Given I have a configuration manager
     And I set the environment variable "SPIRA_URL" to "https://env.example.com"
     When I provide the CLI argument "--spira-url" with value "https://cli.example.com"
-    Then the spira_url should be "https://cli.example.com"
+    Then the config spira_url should be "https://cli.example.com"
 
   Scenario: Validate required parameters are present
     Given I have a configuration manager

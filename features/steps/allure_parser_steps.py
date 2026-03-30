@@ -15,13 +15,15 @@ def step_have_allure_parser(context):
     context.parser = AllureParser()
 
 
+@given('I have a valid Allure JSON file:')
 @given('I have a valid Allure JSON file')
 def step_have_valid_allure_json(context):
-    """Create a valid Allure JSON file from docstring."""
+    """Create a valid Allure JSON file from docstring or default."""
     temp_file = tempfile.NamedTemporaryFile(
         mode='w', delete=False, suffix='.json'
     )
-    temp_file.write(context.text)
+    content = context.text or '{"uuid": "test-1", "name": "Test", "status": "passed"}'
+    temp_file.write(content)
     temp_file.close()
     context.temp_files.append(temp_file.name)
     context.test_file = temp_file.name
@@ -63,6 +65,7 @@ def step_verify_result_status(context, status):
         f"Expected status {expected_status}, got {context.results[0].status}"
 
 
+@when('I parse Allure results with the following statuses:')
 @when('I parse Allure results with the following statuses')
 def step_parse_multiple_statuses(context):
     """Parse multiple Allure results with different statuses."""
@@ -147,6 +150,7 @@ def step_verify_duration(context, duration):
         f"Expected duration {duration}ms, got {actual_ms}ms"
 
 
+@given('I have an Allure result with statusDetails:')
 @given('I have an Allure result with statusDetails')
 def step_have_allure_with_status_details(context):
     """Create Allure result with statusDetails from docstring."""
@@ -186,6 +190,7 @@ def step_verify_stack_trace(context, text):
         f"Expected '{text}' in stack trace, got: {result.stack_trace}"
 
 
+@given('I have an Allure result with attachments:')
 @given('I have an Allure result with attachments')
 def step_have_allure_with_attachments(context):
     """Create Allure result with attachments from docstring."""
@@ -297,6 +302,7 @@ def step_verify_parse_error(context):
 
 
 
+@when('I parse attachments with the following types:')
 @when('I parse attachments with the following types')
 def step_parse_attachments_with_types(context):
     """Parse attachments with different MIME types."""

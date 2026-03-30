@@ -10,7 +10,7 @@ Feature: Evidence Upload Handler
     When I upload the evidence file
     Then the file should be uploaded successfully
     And the request should be sent to "/test-runs/TR:789/attachments"
-    And the Content-Type should be "multipart/form-data"
+    And the Content-Type header should be "multipart/form-data"
 
   Scenario: Read file in binary mode
     Given I have an authenticated Spira API Client
