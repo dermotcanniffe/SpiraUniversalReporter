@@ -98,6 +98,38 @@ class TestCaseMapper:
         
         return None
     
+    def extract_automation_id(self, test_result_data: dict) -> Optional[str]:
+        """
+        Extract stable automation identifier for custom property matching.
+        
+        For Allure: uses top-level testCaseId hash (content-based, stable across runs).
+        For JUnit: uses classname.name as fallback key.
+        
+        Args:
+            test_result_data: Raw test result dictionary
+            
+        Returns:
+            Automation identifier string, or None if not found
+        """
+        if not test_result_data:
+            return None
+        
+        # Allure: top-level testCaseId field (content hash)
+        test_case_id = test_result_data.get('testCaseId')
+        if test_case_id and isinstance(test_case_id, str):
+            logger.debug(f"Found automation ID from Allure testCaseId: {test_case_id}")
+            return test_case_id
+        
+        # JUnit fallback: classname.name
+        classname = test_result_data.get('classname', '')
+        name = test_result_data.get('name', '')
+        if classname and name:
+            junit_key = f"{classname}.{name}"
+            logger.debug(f"Using JUnit classname.name as automation ID: {junit_key}")
+            return junit_key
+        
+        return None
+
     def get_test_case_id(self, test_name: str) -> Optional[int]:
         """
         Get test case ID from test name (legacy method for compatibility).

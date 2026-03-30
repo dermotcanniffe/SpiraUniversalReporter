@@ -477,6 +477,150 @@ class SpiraAPIClient:
         except requests.exceptions.RequestException as e:
             raise APIError(f"Failed to create test case: {str(e)}")
     
+    def search_test_case_by_custom_property(
+        self,
+        project_id: int,
+        custom_field: str,
+        value: str
+    ) -> Optional[int]:
+        """
+        Search for a test case by custom property value.
+        
+        Args:
+            project_id: Spira project ID
+            custom_field: Custom property field name (e.g. 'Custom_04')
+            value: Value to search for
+            
+        Returns:
+            Test case ID if found, None otherwise
+            
+        Raises:
+            APIError: If API request fails
+        """
+        if not self._authenticated:
+            self.authenticate()
+
+        endpoint = f'projects/{project_id}/test-cases/search'
+        url = self._build_url(endpoint)
+
+        payload = [
+            {
+                "PropertyName": custom_field,
+                "StringValue": value
+            }
+        ]
+
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = self._session.post(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                results = response.json()
+                if results and len(results) > 0:
+                    tc_id = results[0].get('TestCaseId')
+                    tc_name = results[0].get('Name', 'Unknown')
+                    logger.info(f"Found TC {tc_id} ({tc_name}) matching {custom_field}={value}")
+                    return tc_id
+                return None
+            elif response.status_code == 404:
+                return None
+            else:
+                raise APIError(
+                    f"Failed to search test cases: HTTP {response.status_code} - {response.text}"
+                )
+
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"Failed to search test cases: {str(e)}")
+
+    def create_test_case_with_custom_property(
+        self,
+        project_id: int,
+        test_case_name: str,
+        custom_field: str,
+        custom_value: str,
+        description: Optional[str] = None
+    ) -> int:
+        """
+        Create a test case and set a custom property value.
+        
+        Args:
+            project_id: Spira project ID
+            test_case_name: Name of the test case
+            custom_field: Custom property field name (e.g. 'Custom_04')
+            custom_value: Value to set on the custom property
+            description: Optional description
+            
+        Returns:
+            Test case ID
+            
+        Raises:
+            APIError: If API request fails
+        """
+        if not self._authenticated:
+            self.authenticate()
+
+        endpoint = f'projects/{project_id}/test-cases'
+        url = self._build_url(endpoint)
+
+        payload = {
+            "Name": test_case_name,
+            "Description": description or f"Auto-created from test automation: {test_case_name}",
+            "TestCaseTypeId": 1,
+            "TestCaseStatusId": 3,
+            "TestCasePriorityId": 3,
+            "CustomProperties": [
+                {
+                    "PropertyNumber": int(custom_field.replace("Custom_", "")),
+                    "StringValue": custom_value
+                }
+            ]
+        }
+
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = self._session.post(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            if response.status_code == 429:
+                raise RateLimitError("Rate limit exceeded")
+            elif response.status_code not in (200, 201):
+                raise APIError(
+                    f"Failed to create test case: HTTP {response.status_code} - {response.text}"
+                )
+
+            response_data = response.json()
+            test_case_id = response_data.get('TestCaseId')
+
+            if test_case_id:
+                logger.info(
+                    f"Created TC {test_case_id} ({test_case_name}) "
+                    f"with {custom_field}={custom_value}"
+                )
+
+            return test_case_id
+
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"Failed to create test case: {str(e)}")
+
     def upload_evidence(
         self,
         project_id: int,

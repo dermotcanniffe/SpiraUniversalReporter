@@ -1,109 +1,167 @@
-"""Factory for creating test result parsers."""
+"""Factory for creating test result parsers with plugin registry."""
 
-import json
+import importlib
+import logging
 from pathlib import Path
-from typing import Optional
-import xml.etree.ElementTree as ET
+from typing import Dict, List, Optional, Type
 
 from ..parser_base import TestResultParser
 from ..exceptions import UnsupportedFormatError
 
+logger = logging.getLogger(__name__)
+
 
 class ParserFactory:
-    """Factory for creating appropriate test result parsers."""
+    """
+    Factory with auto-discovery and manual registration of parsers.
     
-    SUPPORTED_TYPES = ['junit-xml', 'allure-json']
+    Built-in parsers are registered automatically. Custom parsers can be
+    added via register() or by placing them in a custom parsers directory.
     
+    Usage:
+        factory = ParserFactory()
+        
+        # Auto-detect format
+        result_type = factory.detect_result_type('path/to/results')
+        parser = factory.get_parser(result_type)
+        
+        # Or specify explicitly
+        parser = factory.get_parser('extent-html')
+        
+        # Register a custom parser
+        factory.register(MyCustomParser)
+    """
+
+    # Class-level registry shared across instances
+    _registry: Dict[str, Type[TestResultParser]] = {}
+
     def __init__(self):
-        """Initialize the parser factory."""
-        self._parsers = {}
-    
+        """Initialize and register built-in parsers."""
+        self._ensure_builtins_registered()
+
+    @classmethod
+    def register(cls, parser_class: Type[TestResultParser]) -> None:
+        """
+        Register a parser class.
+        
+        Args:
+            parser_class: A TestResultParser subclass with format_name set
+            
+        Raises:
+            ValueError: If format_name is not set or already registered
+        """
+        name = getattr(parser_class, 'format_name', '')
+        if not name:
+            raise ValueError(
+                f"{parser_class.__name__} must set format_name class attribute"
+            )
+        if name in cls._registry:
+            logger.debug(f"Overriding parser for '{name}' with {parser_class.__name__}")
+        cls._registry[name] = parser_class
+        logger.debug(f"Registered parser '{name}' -> {parser_class.__name__}")
+
+    @classmethod
+    def _ensure_builtins_registered(cls):
+        """Register built-in parsers if not already registered."""
+        if cls._registry:
+            return
+
+        from .junit_parser import JUnitParser
+        from .allure_parser import AllureParser
+        from .extent_parser import ExtentParser
+
+        for parser_cls in [JUnitParser, AllureParser, ExtentParser]:
+            if parser_cls.format_name and parser_cls.format_name not in cls._registry:
+                cls.register(parser_cls)
+
     def get_parser(self, result_type: str) -> TestResultParser:
         """
         Get a parser instance for the specified result type.
         
         Args:
-            result_type: Type of test results (junit-xml, allure-json)
+            result_type: Format name (e.g. 'junit-xml', 'allure-json', 'extent-html')
             
         Returns:
             TestResultParser instance
             
         Raises:
-            UnsupportedFormatError: If result type is not supported
+            UnsupportedFormatError: If result type is not registered
         """
-        if result_type not in self.SUPPORTED_TYPES:
+        if result_type not in self._registry:
             raise UnsupportedFormatError(
                 f"Unsupported result type: {result_type}. "
-                f"Supported formats: {', '.join(self.SUPPORTED_TYPES)}"
+                f"Registered formats: {', '.join(self.list_supported_types())}"
             )
-        
-        # Lazy import to avoid circular dependencies
-        if result_type == 'junit-xml':
-            from .junit_parser import JUnitParser
-            return JUnitParser()
-        elif result_type == 'allure-json':
-            from .allure_parser import AllureParser
-            return AllureParser()
-    
+        return self._registry[result_type]()
+
     def detect_result_type(self, file_path: str) -> str:
         """
-        Detect the result type from file extension and content.
+        Auto-detect the result type by asking each registered parser.
         
         Args:
-            file_path: Path to the test results file
+            file_path: Path to test results file or directory
             
         Returns:
-            Detected result type
+            Detected format name
             
         Raises:
-            UnsupportedFormatError: If result type cannot be determined
+            UnsupportedFormatError: If no parser can handle the input
         """
-        path = Path(file_path)
-        
-        # Check file extension first
-        if path.suffix == '.xml':
-            # Verify it's actually JUnit XML by checking content
-            if self._is_junit_xml(file_path):
-                return 'junit-xml'
-        elif path.suffix == '.json':
-            # Check if it's Allure JSON
-            if self._is_allure_json(file_path):
-                return 'allure-json'
-        
+        for name, parser_cls in self._registry.items():
+            try:
+                instance = parser_cls()
+                if instance.can_parse(file_path):
+                    logger.info(f"Auto-detected format: {name}")
+                    return name
+            except Exception as e:
+                logger.debug(f"Parser '{name}' detection failed: {e}")
+                continue
+
         raise UnsupportedFormatError(
             f"Could not determine result type for: {file_path}. "
-            f"Supported formats: {', '.join(self.SUPPORTED_TYPES)}"
+            f"Registered formats: {', '.join(self.list_supported_types())}"
         )
-    
-    def _is_junit_xml(self, file_path: str) -> bool:
-        """Check if file is JUnit XML format."""
-        try:
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-            # JUnit XML has testsuite or testsuites as root
-            return root.tag in ['testsuite', 'testsuites']
-        except:
-            return False
-    
-    def _is_allure_json(self, file_path: str) -> bool:
-        """Check if file is Allure JSON format."""
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-            # Allure results have uuid and status fields
-            if isinstance(data, dict):
-                return 'uuid' in data and 'status' in data
-            elif isinstance(data, list) and len(data) > 0:
-                return 'uuid' in data[0] and 'status' in data[0]
-            return False
-        except:
-            return False
-    
-    def list_supported_types(self) -> list:
+
+    def list_supported_types(self) -> List[str]:
+        """Get list of registered format names."""
+        return list(self._registry.keys())
+
+    @classmethod
+    def load_custom_parsers(cls, directory: str) -> None:
         """
-        Get list of supported result types.
+        Load custom parser modules from a directory.
         
-        Returns:
-            List of supported format strings
+        Each .py file in the directory is imported. Any TestResultParser
+        subclass with a format_name will be auto-registered.
+        
+        Args:
+            directory: Path to directory containing custom parser .py files
         """
-        return self.SUPPORTED_TYPES.copy()
+        parsers_dir = Path(directory)
+        if not parsers_dir.is_dir():
+            logger.warning(f"Custom parsers directory not found: {directory}")
+            return
+
+        for py_file in parsers_dir.glob('*.py'):
+            if py_file.name.startswith('_'):
+                continue
+            try:
+                module_name = f"custom_parsers.{py_file.stem}"
+                spec = importlib.util.spec_from_file_location(module_name, py_file)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                # Find and register any parser classes in the module
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if (
+                        isinstance(attr, type)
+                        and issubclass(attr, TestResultParser)
+                        and attr is not TestResultParser
+                        and getattr(attr, 'format_name', '')
+                    ):
+                        cls.register(attr)
+                        logger.info(f"Loaded custom parser: {attr.format_name} from {py_file.name}")
+
+            except Exception as e:
+                logger.warning(f"Failed to load custom parser {py_file.name}: {e}")

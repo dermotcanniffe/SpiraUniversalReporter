@@ -14,6 +14,19 @@ from ..exceptions import ParseError
 class JUnitParser(TestResultParser):
     """Parser for JUnit XML test results (from TestNG and other frameworks)."""
 
+    format_name = 'junit-xml'
+
+    def can_parse(self, file_path: str) -> bool:
+        """Detect JUnit XML by extension and root element."""
+        path = Path(file_path)
+        if not path.is_file() or path.suffix != '.xml':
+            return False
+        try:
+            tree = ET.parse(file_path)
+            return tree.getroot().tag in ('testsuite', 'testsuites')
+        except Exception:
+            return False
+
     def parse(self, file_path: str) -> List[TestResult]:
         """
         Parse JUnit XML test results.

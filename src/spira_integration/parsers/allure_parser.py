@@ -12,6 +12,25 @@ from ..exceptions import ParseError
 
 class AllureParser(TestResultParser):
     """Parser for Allure JSON test results (from Cypress)."""
+
+    format_name = 'allure-json'
+
+    def can_parse(self, file_path: str) -> bool:
+        """Detect Allure JSON by extension and uuid/status fields."""
+        import json as _json
+        path = Path(file_path)
+        if not path.is_file() or path.suffix != '.json':
+            return False
+        try:
+            with open(file_path, 'r') as f:
+                data = _json.load(f)
+            if isinstance(data, dict):
+                return 'uuid' in data and 'status' in data
+            elif isinstance(data, list) and len(data) > 0:
+                return 'uuid' in data[0] and 'status' in data[0]
+            return False
+        except Exception:
+            return False
     
     def parse(self, file_path: str) -> List[TestResult]:
         """

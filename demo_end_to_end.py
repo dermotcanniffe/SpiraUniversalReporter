@@ -50,6 +50,8 @@ def main():
     release_id = int(os.getenv('SPIRA_RELEASE_ID', '1'))
     results_file = os.getenv('SPIRA_RESULTS_FILE', 'examples/sample-allure-results.json')
     auto_create_test_sets = os.getenv('SPIRA_AUTO_CREATE_TEST_SETS', 'true').lower() in ('true', '1', 'yes')
+    auto_create_test_cases = os.getenv('SPIRA_AUTO_CREATE_TEST_CASES', 'true').lower() in ('true', '1', 'yes')
+    automation_id_field = os.getenv('SPIRA_AUTOMATION_ID_FIELD')  # e.g. Custom_04
     
     print(f"Configuration:")
     print(f"  Spira URL: {spira_url}")
@@ -57,6 +59,8 @@ def main():
     print(f"  Test Set ID: {test_set_id}")
     print(f"  Release ID: {release_id}")
     print(f"  Auto-create Test Sets: {auto_create_test_sets}")
+    print(f"  Auto-create Test Cases: {auto_create_test_cases}")
+    print(f"  Automation ID Field: {automation_id_field or 'Not configured (using TC ID regex)'}")
     print(f"  Results File: {results_file}")
     print()
     
@@ -72,30 +76,53 @@ def main():
     test_results = parser.parse(results_file)
     print(f"  ✓ Parsed {len(test_results)} test results\n")
     
-    # Step 2: Extract test case IDs
-    print("Step 2: Extracting Spira test case IDs...")
+    # Step 2: Extract test identifiers
+    print("Step 2: Extracting test identifiers...")
     print("-" * 70)
     
     mapper = TestCaseMapper()
-    mapped_results = []
-    skipped_results = []
     
-    for result in test_results:
-        tc_id = mapper.extract_test_case_id(result.raw_data) if result.raw_data else None
+    if automation_id_field:
+        print(f"  Mode: Custom property matching ({automation_id_field})\n")
+        # New flow: extract automation IDs for custom property lookup
+        matched_results = []
+        skipped_results = []
         
-        if tc_id:
-            mapped_results.append((result, tc_id))
-            print(f"  ✓ {result.name[:50]:50} → TC:{tc_id}")
-        else:
-            skipped_results.append(result)
-            print(f"  ⚠ {result.name[:50]:50} → No TC ID found")
-    
-    print(f"\n  Mapped: {len(mapped_results)}, Skipped: {len(skipped_results)}\n")
-    
-    if not mapped_results:
-        print("❌ No test results could be mapped to Spira test cases")
-        print("   Add TC IDs to your test names like: [TC:123] or TC-123")
-        return 1
+        for result in test_results:
+            auto_id = mapper.extract_automation_id(result.raw_data) if result.raw_data else None
+            if auto_id:
+                matched_results.append((result, auto_id))
+                print(f"  ✓ {result.name[:50]:50} → {auto_id[:20]}...")
+            else:
+                skipped_results.append(result)
+                print(f"  ⚠ {result.name[:50]:50} → No automation ID")
+        
+        print(f"\n  Matched: {len(matched_results)}, Skipped: {len(skipped_results)}\n")
+        
+        if not matched_results:
+            print("❌ No test results have automation identifiers")
+            return 1
+    else:
+        print(f"  Mode: TC ID regex extraction from test names\n")
+        # Legacy flow: extract numeric TC IDs from names
+        matched_results = []
+        skipped_results = []
+        
+        for result in test_results:
+            tc_id = mapper.extract_test_case_id(result.raw_data) if result.raw_data else None
+            if tc_id:
+                matched_results.append((result, tc_id))
+                print(f"  ✓ {result.name[:50]:50} → TC:{tc_id}")
+            else:
+                skipped_results.append(result)
+                print(f"  ⚠ {result.name[:50]:50} → No TC ID found")
+        
+        print(f"\n  Mapped: {len(matched_results)}, Skipped: {len(skipped_results)}\n")
+        
+        if not matched_results:
+            print("❌ No test results could be mapped to Spira test cases")
+            print("   Add TC IDs to your test names like: [TC:123] or TC-123")
+            return 1
     
     # Step 3: Connect to Spira
     print("Step 3: Connecting to Spira...")
@@ -140,70 +167,100 @@ def main():
         print(f"  ❌ Test set check failed: {e}\n")
         return 1
     
-    # Step 6: Send test runs to Spira
+    # Step 6: Create test runs in Spira
     print("Step 6: Creating test runs in Spira...")
     print("-" * 70)
     
     summary = ExecutionSummary()
-    summary.total_tests = len(mapped_results)
+    summary.total_tests = len(matched_results)
     start_time = datetime.now()
     
-    # Check if auto-create is enabled
-    auto_create = os.getenv('SPIRA_AUTO_CREATE_TEST_CASES', 'true').lower() == 'true'
-    if auto_create:
-        print("  Auto-create test cases: ENABLED\n")
-    else:
-        print("  Auto-create test cases: DISABLED\n")
-    
-    for result, tc_id in mapped_results:
-        try:
-            test_run_id = client.create_test_run(
-                project_id=project_id,
-                test_set_id=test_set_id,
-                test_case_id=tc_id,
-                result=result
-            )
-            summary.successful_uploads += 1
-            status_icon = "✓" if result.status.name == "PASSED" else "✗"
-            test_run_url = f"{spira_url}/TestRun/{test_run_id}.aspx"
-            print(f"  {status_icon} TC:{tc_id} → Test Run #{test_run_id} [{result.status.name}]")
-            print(f"     {test_run_url}")
-            
-        except APIError as e:
-            # Check if it's a 404 (test case doesn't exist)
-            if '404' in str(e) and auto_create:
-                try:
-                    # Auto-create the test case
-                    print(f"  ⚠ TC:{tc_id} not found, creating test case...")
-                    new_tc_id = client.create_test_case(
+    if automation_id_field:
+        # Custom property matching flow
+        print(f"  Matching via {automation_id_field}, auto-create: {auto_create_test_cases}\n")
+        
+        for result, auto_id in matched_results:
+            try:
+                # Search Spira for TC with matching custom property
+                tc_id = client.search_test_case_by_custom_property(
+                    project_id=project_id,
+                    custom_field=automation_id_field,
+                    value=auto_id
+                )
+                
+                if tc_id:
+                    print(f"  ✓ Found TC:{tc_id} for {auto_id[:20]}...")
+                elif auto_create_test_cases:
+                    # Create new TC with custom property
+                    tc_id = client.create_test_case_with_custom_property(
                         project_id=project_id,
                         test_case_name=result.name,
-                        description=f"Auto-created from test automation\n\nOriginal test: {result.name}"
+                        custom_field=automation_id_field,
+                        custom_value=auto_id,
+                        description=f"Auto-created from automation\nID: {auto_id}"
                     )
-                    print(f"  ✓ Created new test case: TC:{new_tc_id}")
-                    
-                    # Now create the test run with the new TC ID
-                    test_run_id = client.create_test_run(
-                        project_id=project_id,
-                        test_set_id=test_set_id,
-                        test_case_id=new_tc_id,
-                        result=result
-                    )
-                    summary.successful_uploads += 1
-                    status_icon = "✓" if result.status.name == "PASSED" else "✗"
-                    test_run_url = f"{spira_url}/TestRun/{test_run_id}.aspx"
-                    print(f"  {status_icon} TC:{new_tc_id} → Test Run #{test_run_id} [{result.status.name}]")
-                    print(f"     {test_run_url}")
-                    
-                except Exception as create_error:
+                    print(f"  + Created TC:{tc_id} for {result.name[:40]}...")
+                else:
+                    print(f"  ⚠ No match for {auto_id[:20]}... (auto-create disabled)")
+                    summary.skipped_tests += 1
+                    continue
+                
+                # Create test run
+                test_run_id = client.create_test_run(
+                    project_id=project_id,
+                    test_set_id=test_set_id,
+                    test_case_id=tc_id,
+                    result=result
+                )
+                summary.successful_uploads += 1
+                status_icon = "✓" if result.status.name == "PASSED" else "✗"
+                print(f"  {status_icon} TC:{tc_id} → Run #{test_run_id} [{result.status.name}]")
+                
+            except Exception as e:
+                summary.failed_uploads += 1
+                print(f"  ❌ {result.name[:40]}... → Failed: {str(e)[:50]}")
+    else:
+        # Legacy TC ID flow
+        print(f"  Auto-create test cases: {auto_create_test_cases}\n")
+        
+        for result, tc_id in matched_results:
+            try:
+                test_run_id = client.create_test_run(
+                    project_id=project_id,
+                    test_set_id=test_set_id,
+                    test_case_id=tc_id,
+                    result=result
+                )
+                summary.successful_uploads += 1
+                status_icon = "✓" if result.status.name == "PASSED" else "✗"
+                print(f"  {status_icon} TC:{tc_id} → Run #{test_run_id} [{result.status.name}]")
+                
+            except APIError as e:
+                if '404' in str(e) and auto_create_test_cases:
+                    try:
+                        print(f"  ⚠ TC:{tc_id} not found, creating...")
+                        new_tc_id = client.create_test_case(
+                            project_id=project_id,
+                            test_case_name=result.name
+                        )
+                        test_run_id = client.create_test_run(
+                            project_id=project_id,
+                            test_set_id=test_set_id,
+                            test_case_id=new_tc_id,
+                            result=result
+                        )
+                        summary.successful_uploads += 1
+                        status_icon = "✓" if result.status.name == "PASSED" else "✗"
+                        print(f"  {status_icon} TC:{new_tc_id} → Run #{test_run_id} [{result.status.name}]")
+                    except Exception as create_error:
+                        summary.failed_uploads += 1
+                        print(f"  ❌ TC:{tc_id} → Failed: {str(create_error)[:50]}")
+                else:
                     summary.failed_uploads += 1
-                    print(f"  ❌ Failed to auto-create TC:{tc_id}: {str(create_error)[:50]}")
-            else:
+                    print(f"  ❌ TC:{tc_id} → Failed: {str(e)[:50]}")
+            except Exception as e:
                 summary.failed_uploads += 1
                 print(f"  ❌ TC:{tc_id} → Failed: {str(e)[:50]}")
-        except Exception as e:
-            summary.failed_uploads += 1
-            print(f"  ❌ TC:{tc_id} → Failed: {str(e)[:50]}")
     
     summary.skipped_tests = len(skipped_results)
     summary.execution_duration = (datetime.now() - start_time).total_seconds()

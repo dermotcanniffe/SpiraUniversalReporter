@@ -316,8 +316,8 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - Verify exit codes and error handling
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 16. Automatic TC Matching via Spira Custom Property
-  - [ ] 16.1 Implement Spira custom property lookup for test case matching
+- [x] 16. Automatic TC Matching via Spira Custom Property
+  - [x] 16.1 Implement Spira custom property lookup for test case matching
     - Extract stable test identifier from results (Allure `testCaseId` hash, JUnit classname.name, etc.)
     - Query Spira for Test Cases where custom property `AutomationTestCaseId` matches the identifier
     - If match found, use that TC ID for the test run
@@ -325,13 +325,13 @@ This plan implements a Python-based CLI tool that parses test results from CI/CD
     - This replaces the need for TC IDs embedded in test names or local mapping files
     - _Prerequisite: Custom property `AutomationTestCaseId` (text) configured on Test Case artifact in Spira_
   
-  - [ ] 16.2 Implement Spira test case search by custom property
+  - [x] 16.2 Implement Spira test case search by custom property
     - Build GET request to search test cases with filter on custom property value
     - Handle pagination if project has many test cases
     - Cache results per run to avoid repeated API calls for the same identifier
     - Fall back to name-based matching if custom property not configured
   
-  - [ ] 16.3 Update auto-create to populate custom property
+  - [x] 16.3 Update auto-create to populate custom property
     - When creating a new test case, include the automation identifier as the custom property value
     - Ensure subsequent runs can find the TC via the custom property lookup
     - Support configurable custom property field name via env var (SPIRA_AUTOMATION_ID_FIELD)
