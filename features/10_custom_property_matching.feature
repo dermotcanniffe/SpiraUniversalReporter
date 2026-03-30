@@ -3,54 +3,47 @@ Feature: Stateless Test Case Matching via Custom Properties
   I want test results automatically matched to Spira test cases via custom properties
   So that no local mapping files or test name modifications are needed
 
-  Scenario: Search for test case by custom property value
-    Given I have an authenticated Spira API Client
-    And a test case exists with Custom_04 set to "e82fecfb3ac31d524a5d9c18c7cec49e"
-    When I search for a test case with Custom_04 = "e82fecfb3ac31d524a5d9c18c7cec49e"
-    Then I should receive the matching test case ID
+  Scenario: Extract automation ID from Allure testCaseId hash
+    Given I have a test case mapper
+    And I have raw data with testCaseId "e82fecfb3ac31d524a5d9c18c7cec49e"
+    When I extract the automation ID
+    Then the automation ID should be "e82fecfb3ac31d524a5d9c18c7cec49e"
 
-  Scenario: Return None when no test case matches custom property
-    Given I have an authenticated Spira API Client
-    And no test case has Custom_04 set to "nonexistent-hash"
-    When I search for a test case with Custom_04 = "nonexistent-hash"
-    Then I should receive None
+  Scenario: Extract automation ID from JUnit classname.name
+    Given I have a test case mapper
+    And I have raw data with classname "com.example.LoginTest" and name "testLogin"
+    When I extract the automation ID
+    Then the automation ID should be "com.example.LoginTest.testLogin"
 
-  Scenario: Create test case with custom property value
-    Given I have an authenticated Spira API Client
-    When I create a test case "Login Test" with Custom_04 = "abc123hash"
-    Then the test case should be created successfully
-    And the custom property Custom_04 should be set to "abc123hash"
+  Scenario: Return None when no automation ID available
+    Given I have a test case mapper
+    And I have raw data with no identifiers
+    When I extract the automation ID
+    Then the automation ID should be None
 
-  Scenario: Full matching flow - existing test case found
-    Given I have an authenticated Spira API Client
-    And automation_id_field is configured as "Custom_04"
-    And a test result has automation ID "e82fecfb3ac31d524a5d9c18c7cec49e"
-    And a test case exists with that automation ID in Custom_04
-    When the matching flow runs
-    Then the existing test case ID should be used for the test run
+  Scenario: Fallback to TC ID regex when no automation_id_field
+    Given I have a test case mapper
+    When I extract TC ID from "Login test [TC:707]"
+    Then the TC ID should be 707
 
-  Scenario: Full matching flow - auto-create new test case
-    Given I have an authenticated Spira API Client
-    And automation_id_field is configured as "Custom_04"
-    And auto_create_test_cases is enabled
-    And a test result has automation ID "new-hash-never-seen"
-    And no test case exists with that automation ID
-    When the matching flow runs
-    Then a new test case should be created with Custom_04 = "new-hash-never-seen"
-    And the new test case ID should be used for the test run
+  Scenario: Fallback returns None for test names without TC IDs
+    Given I have a test case mapper
+    When I extract TC ID from "Login test with no ID"
+    Then the TC ID should be None
 
-  Scenario: Full matching flow - skip when auto-create disabled
-    Given I have an authenticated Spira API Client
-    And automation_id_field is configured as "Custom_04"
-    And auto_create_test_cases is disabled
-    And a test result has automation ID "unknown-hash"
-    And no test case exists with that automation ID
-    When the matching flow runs
-    Then the test result should be skipped
-    And a warning should be logged
+  @integration
+  Scenario: Search Spira for test case by custom property
+    Given the environment is configured
+    And SPIRA_AUTOMATION_ID_FIELD is defined
+    And I have an authenticated client from environment
+    When I search for a test case with a known automation ID
+    Then the search should return a result or empty list without error
 
-  Scenario: Fallback to TC ID regex when automation_id_field not configured
-    Given automation_id_field is not configured
-    And a test result has name "Login test [TC:707]"
-    When the matching flow runs
-    Then TC ID 707 should be extracted from the test name
+  @integration
+  Scenario: Create test case with custom property and find it
+    Given the environment is configured
+    And SPIRA_AUTOMATION_ID_FIELD is defined
+    And I have an authenticated client from environment
+    When I create a test case with a unique automation ID
+    And I search for that automation ID
+    Then the search should return the created test case

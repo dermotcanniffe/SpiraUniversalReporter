@@ -516,9 +516,13 @@ class SpiraAPIClient:
         }
 
         try:
+            params = self._get_auth_params()
+            params['starting_row'] = 1
+            params['number_of_rows'] = 50
+
             response = self._session.post(
                 url,
-                params=self._get_auth_params(),
+                params=params,
                 headers=headers,
                 json=payload,
                 timeout=30

@@ -134,10 +134,24 @@ def step_provide_single_cli_arg(context, arg_name, value):
 @when('I attempt to load configuration without providing "{param}"')
 def step_load_without_param(context, param):
     """Attempt to load configuration without a required parameter."""
-    # Create minimal args without the specified param
     arg_dict = {}
-    
-    # Add all required params except the one we're testing
+
+    # Map param name to env var name so we can clear it
+    param_to_env = {
+        'spira-url': 'SPIRA_URL',
+        'project-id': 'SPIRA_PROJECT_ID',
+        'test-set-id': 'SPIRA_TEST_SET_ID',
+        'release-id': 'SPIRA_RELEASE_ID',
+        'username': 'SPIRA_USERNAME',
+        'api-key': 'SPIRA_API_KEY',
+        'results-file': 'SPIRA_RESULTS_FILE',
+    }
+
+    # Temporarily clear the env var for the param we're testing
+    env_key = param_to_env.get(param)
+    if env_key:
+        context.original_env[env_key] = os.environ.pop(env_key, None)
+
     if param != 'spira-url':
         arg_dict['url'] = 'https://spira.example.com'
     if param != 'project-id':
@@ -194,7 +208,9 @@ def step_verify_error_message(context, message):
 @when('I provide an invalid URL "{url}"')
 def step_provide_invalid_url(context, url):
     """Provide an invalid URL."""
-    # Create temp file
+    # Clear SPIRA_URL env var so it doesn't override our test
+    context.original_env['SPIRA_URL'] = os.environ.pop('SPIRA_URL', None)
+
     temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xml')
     temp_file.write('<testsuite></testsuite>')
     temp_file.close()
