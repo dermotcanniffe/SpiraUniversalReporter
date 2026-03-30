@@ -59,3 +59,47 @@ Feature: Spira API Client core functionality
     When the Spira API returns an error response with status 400
     Then an APIError should be raised
     And the error should include status code 400
+
+  Scenario: Validate release exists
+    Given I have an authenticated Spira API Client
+    When I validate release 5 in project 1
+    Then the release should be validated successfully
+    And the release name should be logged
+
+  Scenario: Handle release not found
+    Given I have an authenticated Spira API Client
+    When I validate a non-existent release
+    Then an APIError should be raised
+    And the error should indicate the release was not found
+    And the error should indicate releases cannot be auto-created
+
+  Scenario: Get existing test set
+    Given I have an authenticated Spira API Client
+    When I check for test set 10 in project 1
+    Then the test set should be found
+    And the test set ID should be returned
+
+  Scenario: Auto-create test set when not found
+    Given I have an authenticated Spira API Client
+    And auto_create_test_sets is enabled
+    When I check for a non-existent test set
+    Then a new test set should be created
+    And the new test set ID should be returned
+
+  Scenario: Fail when test set not found and auto-create disabled
+    Given I have an authenticated Spira API Client
+    And auto_create_test_sets is disabled
+    When I check for a non-existent test set
+    Then an APIError should be raised
+
+  Scenario: Search test case by custom property
+    Given I have an authenticated Spira API Client
+    When I search for test cases with Custom_04 = "test-hash"
+    Then the search request should POST to the test-cases/search endpoint
+    And the filter should include the custom property name and value
+
+  Scenario: Create test case with custom property
+    Given I have an authenticated Spira API Client
+    When I create a test case with custom property Custom_04 = "test-hash"
+    Then the test case should be created
+    And the custom property should be included in the request payload

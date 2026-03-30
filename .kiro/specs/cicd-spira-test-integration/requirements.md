@@ -265,3 +265,50 @@ This document specifies requirements for a Python-based CI/CD integration tool t
 4. THE Cucumber tests SHALL verify test result parsing for supported formats
 5. THE Cucumber tests SHALL verify Spira API communication using mock responses
 6. THE Cucumber tests SHALL verify error handling for invalid inputs
+
+### Requirement 17: Parse ExtentReports HTML Results
+
+**User Story:** As a test automation engineer using Selenium with ExtentReports, I want the script to parse ExtentReports HTML output, so that my test outcomes are sent to Spira without modifying my test framework.
+
+#### Acceptance Criteria
+
+1. WHEN a directory containing ExtentReports Summary.html is provided, THE ExtentReports Test_Result_Parser SHALL parse it into structured test result data
+2. THE ExtentReports Test_Result_Parser SHALL locate Summary.html by searching up to 2 directory levels deep
+3. THE ExtentReports Test_Result_Parser SHALL extract test case names from HTML node elements
+4. THE ExtentReports Test_Result_Parser SHALL extract pass/fail/skip status from HTML status attributes
+5. THE ExtentReports Test_Result_Parser SHALL extract execution timestamps and durations from HTML elements
+6. THE ExtentReports Test_Result_Parser SHALL extract error messages from step detail table rows
+7. THE ExtentReports Test_Result_Parser SHALL discover screenshot files from per-test-case Screenshot directories
+8. THE ExtentReports Test_Result_Parser SHALL discover consolidated screenshot documents from ConsolidatedScreenshots directories
+9. WHEN Summary.html is not found, THE ExtentReports Test_Result_Parser SHALL raise a ParseError with a descriptive message
+
+### Requirement 18: Pluggable Parser Registration
+
+**User Story:** As a developer extending the tool for new test frameworks, I want to add custom parsers without modifying core code, so that the tool can support any test result format.
+
+#### Acceptance Criteria
+
+1. THE TestResultParser base class SHALL define a `format_name` class attribute for parser identification
+2. THE TestResultParser base class SHALL define a `can_parse()` method for format auto-detection
+3. THE ParserFactory SHALL maintain a registry of parser classes keyed by format_name
+4. THE ParserFactory SHALL provide a `register()` class method to add parsers to the registry at runtime
+5. THE ParserFactory SHALL provide a `load_custom_parsers()` class method to discover and register parsers from a directory of .py files
+6. THE ParserFactory SHALL auto-detect formats by iterating registered parsers and calling `can_parse()`
+7. THE repository SHALL include a sample_custom_parser.py template with step-by-step instructions
+
+### Requirement 19: Stateless Test Case Matching via Custom Properties
+
+**User Story:** As a test manager, I want test results automatically matched to Spira test cases using a stable identifier stored in Spira, so that no local mapping files or test name modifications are needed.
+
+#### Acceptance Criteria
+
+1. WHEN `automation_id_field` is configured, THE Integration_Script SHALL extract a stable automation identifier from each test result
+2. FOR Allure results, THE Integration_Script SHALL use the top-level `testCaseId` hash as the automation identifier
+3. FOR JUnit results, THE Integration_Script SHALL use `classname.name` as the automation identifier
+4. FOR ExtentReports results, THE Integration_Script SHALL use the test case name as the automation identifier
+5. THE Spira_API_Client SHALL search for Test Cases by custom property value using the search API
+6. WHEN a matching Test Case is found, THE Integration_Script SHALL use that Test Case ID for the test run
+7. WHEN no matching Test Case is found and auto_create_test_cases is enabled, THE Spira_API_Client SHALL create a new Test Case with the automation identifier stored in the custom property
+8. WHEN no matching Test Case is found and auto_create_test_cases is disabled, THE Integration_Script SHALL log a warning and skip the test result
+9. THE `automation_id_field` parameter SHALL be configurable via CLI argument or environment variable (SPIRA_AUTOMATION_ID_FIELD)
+10. WHEN `automation_id_field` is not configured, THE Integration_Script SHALL fall back to TC ID extraction from test names
