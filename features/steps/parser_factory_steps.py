@@ -123,9 +123,106 @@ def step_request_supported_types(context):
     context.supported_types = context.factory.list_supported_types()
 
 
+@then('I should receive:')
 @then('I should receive')
 def step_verify_supported_types(context):
     """Verify list of supported types."""
     expected_types = [row['type'] for row in context.table]
     assert set(context.supported_types) == set(expected_types), \
         f"Expected {expected_types}, got {context.supported_types}"
+
+
+@given('I have a valid JUnit XML file')
+def step_have_valid_junit_xml(context):
+    """Create a valid JUnit XML file."""
+    temp_file = tempfile.NamedTemporaryFile(
+        mode='w', delete=False, suffix='.xml'
+    )
+    temp_file.write('<?xml version="1.0"?><testsuite name="test"><testcase name="t1"/></testsuite>')
+    temp_file.close()
+    context.temp_files.append(temp_file.name)
+    context.test_file = temp_file.name
+
+
+@given('I have a directory containing Summary.html')
+def step_have_extent_directory(context):
+    """Create a temp directory with a Summary.html file."""
+    import os
+    temp_dir = tempfile.mkdtemp()
+    summary_path = os.path.join(temp_dir, 'Summary.html')
+    with open(summary_path, 'w') as f:
+        f.write("""<!DOCTYPE html><html><head>
+        <title>Test Automation Summary Report</title>
+        </head><body class='extent dark'>
+        <ul id='test-collection' class='test-collection'>
+        <li class='test displayed active has-leaf fail' status='fail'>
+        <ul class='collapsible node-list'>
+        <li class='node level-1 leaf fail' status='fail'>
+        <div class='collapsible-header'>
+        <div class='node-name'>SampleTest</div>
+        <span class='node-time'>Mar 26, 2026 06:55:58 PM</span>
+        <span class='node-duration'>0h 0m 1s+0ms</span>
+        </div>
+        <div class='collapsible-body'><div class='node-steps'>
+        <table class='bordered table-results'><tbody>
+        <tr class='log' status='fail'>
+        <td class='status fail'></td><td class='timestamp'>6:55:59 PM</td>
+        <td class='step-details'>Sample error</td>
+        </tr></tbody></table></div></div>
+        </li></ul></li></ul></body></html>""")
+    context.temp_files.append(temp_dir)
+    context.test_file = temp_dir
+
+
+@given('I have a custom parser class with format_name "{name}"')
+def step_have_custom_parser_class(context, name):
+    """Create a custom parser class."""
+    from src.spira_integration.parser_base import TestResultParser
+
+    class CustomTestParser(TestResultParser):
+        format_name = name
+
+        def can_parse(self, file_path):
+            return False
+
+        def parse(self, file_path):
+            return []
+
+    context.custom_parser_class = CustomTestParser
+
+
+@when('I register the custom parser')
+def step_register_custom_parser(context):
+    """Register the custom parser."""
+    context.factory.register(context.custom_parser_class)
+
+
+@then('"{name}" should appear in the supported types list')
+def step_verify_custom_in_list(context, name):
+    """Verify custom parser appears in supported types."""
+    types = context.factory.list_supported_types()
+    assert name in types, f"'{name}' not in {types}"
+
+
+@then('I should be able to get a parser for "{name}"')
+def step_verify_can_get_custom_parser(context, name):
+    """Verify we can get the custom parser."""
+    parser = context.factory.get_parser(name)
+    assert parser is not None
+
+
+@then('each registered parser should have a can_parse method')
+def step_verify_all_have_can_parse(context):
+    """Verify all registered parsers have can_parse."""
+    for name in context.factory.list_supported_types():
+        parser = context.factory.get_parser(name)
+        assert hasattr(parser, 'can_parse'), f"Parser '{name}' missing can_parse"
+        assert callable(parser.can_parse), f"Parser '{name}' can_parse not callable"
+
+
+@then('each registered parser should have a non-empty format_name')
+def step_verify_all_have_format_name(context):
+    """Verify all registered parsers have format_name."""
+    for name in context.factory.list_supported_types():
+        parser = context.factory.get_parser(name)
+        assert getattr(parser, 'format_name', ''), f"Parser '{name}' missing format_name"

@@ -13,38 +13,34 @@ Feature: Parser Factory and result type detection
     When I request a parser for type "allure-json"
     Then I should receive an AllureParser instance
 
-  Scenario: Detect result type from XML file extension
+  Scenario: Get parser by explicit type - ExtentReports
     Given I have a parser factory
-    And I have a file named "results.xml"
+    When I request a parser for type "extent-html"
+    Then I should receive an ExtentParser instance
+
+  Scenario: Auto-detect JUnit XML from file
+    Given I have a parser factory
+    And I have a valid JUnit XML file
     When I detect the result type
     Then it detects "junit-xml"
 
-  Scenario: Detect result type from JSON file extension
+  Scenario: Auto-detect Allure JSON from file
     Given I have a parser factory
-    And I have a file named "allure-results.json"
+    And I have a valid Allure JSON file
     When I detect the result type
     Then it detects "allure-json"
 
-  Scenario: Detect result type from XML file content
+  Scenario: Auto-detect ExtentReports from directory
     Given I have a parser factory
-    And I have a file with XML content starting with "<testsuite"
-    When I detect the result type from content
-    Then it detects "junit-xml"
-
-  Scenario: Detect result type from Allure JSON content
-    Given I have a parser factory
-    And I have a file with JSON content containing "uuid" and "status" fields
-    When I detect the result type from content
-    Then it detects "allure-json"
+    And I have a directory containing Summary.html
+    When I detect the result type
+    Then it detects "extent-html"
 
   Scenario: Raise error for unsupported format
     Given I have a parser factory
     When I request a parser for type "unsupported-format"
     Then an UnsupportedFormatError should be raised
-    And the error message should list supported formats:
-      | format       |
-      | junit-xml    |
-      | allure-json  |
+    And the error message should list supported formats
 
   Scenario: List supported parser types
     Given I have a parser factory
@@ -53,3 +49,16 @@ Feature: Parser Factory and result type detection
       | type         |
       | junit-xml    |
       | allure-json  |
+      | extent-html  |
+
+  Scenario: Register a custom parser at runtime
+    Given I have a parser factory
+    And I have a custom parser class with format_name "custom-csv"
+    When I register the custom parser
+    Then "custom-csv" should appear in the supported types list
+    And I should be able to get a parser for "custom-csv"
+
+  Scenario: Each parser declares can_parse for auto-detection
+    Given I have a parser factory
+    Then each registered parser should have a can_parse method
+    And each registered parser should have a non-empty format_name

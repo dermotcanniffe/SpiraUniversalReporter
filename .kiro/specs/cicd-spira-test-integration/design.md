@@ -28,6 +28,29 @@ The architecture supports future additions:
 - pytest JSON parser
 - Cucumber Messages parser
 - Additional evidence formats
+
+### CLI Operational Modes
+
+The tool provides a `spira-report` console command with three modes:
+
+1. **Full Run** (`spira-report [path]`): Parse results, match TCs, create test runs, upload evidence
+2. **Pre-flight** (`spira-report --preflight`): Validate config and Spira connectivity only
+3. **Help** (`spira-report --help`): Display usage and environment variable reference
+
+**Results Path Resolution:**
+1. Positional CLI argument (highest priority)
+2. `SPIRA_RESULTS_DIR` environment variable
+3. Current working directory (fallback)
+
+**Auto-Sense Discovery:**
+- Scans the resolved path using each registered parser's `can_parse()` method
+- Checks both files and immediate subdirectories
+- Uses first match if multiple found, logs all candidates
+
+**Package Distribution:**
+- Installable via `pip install` from git or PyPI
+- Console script entry point: `spira-report` → `spira_integration.cli:main`
+- All configuration via environment variables (no config files required)
 - Advanced mapping strategies (regex, fuzzy matching)
 
 ## Architecture
@@ -111,11 +134,15 @@ class ConfigurationManager:
 - `spira_url`: Spira instance URL (required)
 - `project_id`: Spira project identifier (required)
 - `test_set_id`: Spira test set identifier (required)
+- `release_id`: Spira release identifier (required, validated not auto-created)
 - `username`: Spira username (required)
 - `api_key`: Spira API key (required)
-- `results_file`: Path to test results file (required)
+- `results_file`: Path to test results file or directory (required)
 - `result_type`: Format of test results (optional, auto-detected if not provided)
 - `mapping_file`: Path to test case mapping file (optional)
+- `auto_create_test_cases`: Auto-create missing test cases (optional, default: true)
+- `auto_create_test_sets`: Auto-create missing test sets (optional, default: true)
+- `automation_id_field`: Spira custom property field name for stateless TC matching (optional, e.g. Custom_04)
 
 **Priority Rules**:
 - CLI arguments override environment variables
@@ -146,6 +173,13 @@ class ParserFactory:
 **Supported Types** (MVP):
 - `junit-xml`: JUnit XML format (TestNG compatible)
 - `allure-json`: Allure JSON format (Cypress compatible)
+- `extent-html`: ExtentReports HTML format (Selenium/Java compatible)
+
+**Plugin Registration**:
+- Parsers self-register via `format_name` class attribute and `can_parse()` method
+- `ParserFactory.register(ParserClass)` for manual registration at runtime
+- `ParserFactory.load_custom_parsers(directory)` for auto-discovery from .py files
+- Built-in parsers are registered automatically on first factory instantiation
 
 ### 4. Test Result Parser Interface
 
@@ -154,11 +188,13 @@ class ParserFactory:
 **Interface**:
 ```python
 class TestResultParser(ABC):
+    format_name: str = ''  # Unique identifier for this format
+    
     @abstractmethod
     def parse(self, file_path: str) -> List[TestResult]
     
-    @abstractmethod
-    def validate_format(self, file_path: str) -> bool
+    def can_parse(self, file_path: str) -> bool
+        """Auto-detection: return True if this parser handles the given file/directory."""
 ```
 
 **TestResult Data Structure**:
@@ -217,6 +253,30 @@ class TestResult:
 - Resolve relative paths against results directory
 - Support common Cypress evidence types: PNG, JPEG, MP4
 
+### 6a. ExtentReports HTML Parser
+
+**Responsibility**: Parse ExtentReports HTML output (Selenium/Java frameworks)
+
+**Implementation Details**:
+- Use `BeautifulSoup` (beautifulsoup4) for HTML parsing
+- Locate `Summary.html` by searching up to 2 directory levels deep
+- Extract test nodes from `li.node.leaf` CSS selectors
+- Parse timestamps from ExtentReports date format (`MMM d, yyyy hh:mm:ss a`)
+- Parse durations from ExtentReports format (`0h 0m 56s+560ms`)
+
+**Status Mapping**:
+- `"pass"` → PASS
+- `"fail"` → FAIL
+- `"fatal"` → FAIL
+- `"error"` → FAIL
+- `"warning"` → CAUTION
+- `"skip"` → SKIP
+
+**Evidence Handling**:
+- Discover screenshots from per-test-case `Screenshots/` directories
+- Discover consolidated docs from `ConsolidatedScreenshots/` directories
+- Match directories to test names by prefix (e.g. `Web_TC01_<timestamp>/`)
+
 ### 7. Test Case Mapper
 
 **Responsibility**: Map test result names to Spira test case identifiers
@@ -226,7 +286,17 @@ class TestResult:
 class TestCaseMapper:
     def load_mappings(self, mapping_file: Optional[str]) -> None
     def get_test_case_id(self, test_name: str) -> Optional[int]
+    def extract_test_case_id(self, test_result_data: dict) -> Optional[int]
+    def extract_automation_id(self, test_result_data: dict) -> Optional[str]
 ```
+
+**Automation ID Extraction** (for custom property matching):
+- Allure: top-level `testCaseId` field (content-based hash, stable across runs)
+- JUnit: `classname.name` composite key
+- ExtentReports: test case name from HTML
+
+**TC ID Extraction** (fallback, from test names):
+- `[TC:123]`, `TC-123:`, `(TC:123)`, `TC123` patterns via regex
 
 **Mapping File Format** (JSON):
 ```json
@@ -260,9 +330,17 @@ class TestCaseMapper:
 class SpiraAPIClient:
     def __init__(self, base_url: str, username: str, api_key: str)
     def authenticate(self) -> None
+    def validate_release(self, project_id: int, release_id: int) -> dict
+    def create_or_get_test_set(self, project_id: int, test_set_id: int, 
+                               release_id: int, auto_create: bool) -> int
     def create_test_run(self, project_id: int, test_set_id: int, 
                        test_case_id: int, result: TestResult) -> int
-    def upload_evidence(self, test_run_id: int, file_path: str) -> None
+    def create_test_case(self, project_id: int, test_case_name: str) -> int
+    def create_test_case_with_custom_property(self, project_id: int, 
+                       test_case_name: str, custom_field: str, custom_value: str) -> int
+    def search_test_case_by_custom_property(self, project_id: int, 
+                       custom_field: str, value: str) -> Optional[int]
+    def upload_evidence(self, project_id: int, test_run_id: int, file_path: str) -> None
 ```
 
 **Authentication**:
@@ -328,11 +406,15 @@ class Configuration:
     spira_url: str
     project_id: int
     test_set_id: int
+    release_id: int
     username: str
     api_key: str
     results_file: str
     result_type: Optional[str]
     mapping_file: Optional[str]
+    auto_create_test_cases: bool = True
+    auto_create_test_sets: bool = True
+    automation_id_field: Optional[str] = None  # e.g. Custom_04
 ```
 
 ### TestResult

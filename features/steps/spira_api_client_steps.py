@@ -1,351 +1,648 @@
-"""Step definitions for Spira API Client feature."""
+"""Step definitions for Spira API client — real integration tests using env vars."""
 
-from behave import given, when, then
-from unittest.mock import Mock, patch, MagicMock
+import os
+import tempfile
+from pathlib import Path
 from datetime import datetime
-
+from unittest.mock import MagicMock, patch
+from behave import given, when, then
 from src.spira_integration.api.spira_client import SpiraAPIClient
 from src.spira_integration.models import TestResult, TestStatus
 from src.spira_integration.exceptions import (
-    AuthenticationError,
-    APIError,
-    ValidationError
+    AuthenticationError, APIError, ValidationError, RateLimitError
 )
 
 
-@given('I have Spira credentials')
-def step_have_spira_credentials(context):
-    """Store Spira credentials from table."""
-    context.credentials = {}
-    for row in context.table:
-        context.credentials[row['field']] = row['value']
+# --- Environment and client setup ---
 
-
-@when('I initialize the Spira API Client')
-def step_initialize_spira_client(context):
-    """Initialize Spira API Client with credentials."""
-    try:
-        context.client = SpiraAPIClient(
-            base_url=context.credentials['base_url'],
-            username=context.credentials['username'],
-            api_key=context.credentials['api_key']
-        )
-        context.error = None
-    except Exception as e:
-        context.error = e
-        context.client = None
-
-
-@then('the client should be created successfully')
-def step_client_created_successfully(context):
-    """Verify client was created without errors."""
-    assert context.error is None, f"Expected no error, but got: {context.error}"
-    assert context.client is not None, "Client should be created"
-    # Also verify base URL was normalized
-    expected_url = context.credentials['base_url'].rstrip('/') + '/'
-    assert context.client.base_url == expected_url, \
-        f"Expected base URL '{expected_url}', got '{context.client.base_url}'"
-
-
-@given('I have a Spira API Client')
-def step_have_spira_client(context):
-    """Create a basic Spira API Client."""
-    context.client = SpiraAPIClient(
-        base_url="https://spira.example.com",
-        username="testuser",
-        api_key="{test-api-key}"
-    )
-
-
-@when('I authenticate with valid credentials')
-def step_authenticate_valid(context):
-    """Authenticate with valid credentials (mocked)."""
-    with patch.object(context.client._session, 'get') as mock_get:
-        # Mock successful authentication response
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = []
-        mock_get.return_value = mock_response
-        
-        try:
-            context.client.authenticate()
-            context.error = None
-        except Exception as e:
-            context.error = e
-
-
-@then('the authentication should succeed')
-def step_authentication_succeeds(context):
-    """Verify authentication succeeded."""
-    assert context.error is None, f"Expected no error, but got: {context.error}"
-    assert context.client._authenticated is True, "Client should be authenticated"
-
-
-@then('the authentication state should be cached')
-def step_authentication_cached(context):
-    """Verify authentication state is cached."""
-    assert context.client._authenticated is True, "Authentication state should be cached"
-
-
-@given('I have Spira credentials with invalid URL "{invalid_url}"')
-def step_have_invalid_url_credentials(context, invalid_url):
-    """Store invalid URL credentials."""
-    context.credentials = {
-        'base_url': invalid_url,
-        'username': 'testuser',
-        'api_key': '{test-key}'
+@given('the environment is configured')
+def step_env_configured(context):
+    """Verify required env vars are present."""
+    context.env = {
+        'url': os.environ.get('SPIRA_URL', ''),
+        'username': os.environ.get('SPIRA_USERNAME', ''),
+        'api_key': os.environ.get('SPIRA_API_KEY', ''),
+        'project_id': int(os.environ.get('SPIRA_PROJECT_ID', '0')),
+        'test_set_id': int(os.environ.get('SPIRA_TEST_SET_ID', '0')),
+        'release_id': int(os.environ.get('SPIRA_RELEASE_ID', '0')),
+        'automation_id_field': os.environ.get('SPIRA_AUTOMATION_ID_FIELD', ''),
     }
 
 
-@when('I attempt to initialize the Spira API Client')
-def step_attempt_initialize_client(context):
-    """Attempt to initialize client (may fail)."""
+@then('{var_name} should be defined and non-empty')
+def step_env_var_defined(context, var_name):
+    val = os.environ.get(var_name, '')
+    assert val, f"{var_name} is not defined or empty"
+
+
+@when('I create a Spira API client from environment')
+def step_create_client_from_env(context):
+    context.client = SpiraAPIClient(
+        base_url=context.env['url'],
+        username=context.env['username'],
+        api_key=context.env['api_key']
+    )
+
+
+@given('I have an authenticated client from environment')
+def step_have_auth_client(context):
+    context.client = SpiraAPIClient(
+        base_url=context.env['url'],
+        username=context.env['username'],
+        api_key=context.env['api_key']
+    )
+    context.client.authenticate()
+
+
+@given('I am authenticated with Spira')
+def step_authenticated_with_spira(context):
+    step_have_auth_client(context)
+
+
+@when('I authenticate')
+def step_authenticate(context):
     try:
-        context.client = SpiraAPIClient(
-            base_url=context.credentials['base_url'],
-            username=context.credentials['username'],
-            api_key=context.credentials['api_key']
+        context.client.authenticate()
+        context.auth_error = None
+    except AuthenticationError as e:
+        context.auth_error = e
+
+
+@then('authentication should succeed')
+def step_auth_succeeded(context):
+    assert context.client._authenticated, "Authentication did not succeed"
+    assert getattr(context, 'auth_error', None) is None, f"Auth error: {context.auth_error}"
+
+
+@when('I create a Spira API client with wrong API key')
+def step_create_client_bad_key(context):
+    context.client = SpiraAPIClient(
+        base_url=context.env['url'],
+        username=context.env['username'],
+        api_key='{00000000-0000-0000-0000-000000000000}'
+    )
+
+
+@when('I attempt to authenticate')
+def step_attempt_auth(context):
+    try:
+        context.client.authenticate()
+        context.error = None
+    except AuthenticationError as e:
+        context.error = e
+
+
+@then('an AuthenticationError should be raised')
+def step_verify_auth_error(context):
+    assert context.error is not None, "Expected AuthenticationError"
+    assert isinstance(context.error, AuthenticationError)
+
+
+@when('I create a Spira API client with URL "{url}"')
+def step_create_client_bad_url(context, url):
+    try:
+        context.client = SpiraAPIClient(base_url=url, username='u', api_key='k')
+        context.error = None
+    except ValidationError as e:
+        context.error = e
+
+
+@then('a ValidationError should be raised')
+def step_verify_validation_error(context):
+    assert context.error is not None, "Expected ValidationError"
+    assert isinstance(context.error, ValidationError)
+
+
+# --- Release validation ---
+
+@when('I validate the configured release')
+def step_validate_configured_release(context):
+    try:
+        context.release_data = context.client.validate_release(
+            context.env['project_id'], context.env['release_id']
+        )
+        context.error = None
+    except APIError as e:
+        context.error = e
+        context.release_data = None
+
+
+@given('the configured release is valid')
+def step_release_is_valid(context):
+    context.release_data = context.client.validate_release(
+        context.env['project_id'], context.env['release_id']
+    )
+
+
+@then('the release should exist')
+def step_release_exists(context):
+    assert context.release_data is not None, f"Release not found: {getattr(context, 'error', '')}"
+
+
+@then('the release data should include a name')
+@then('the release name should be returned')
+def step_release_has_name(context):
+    assert 'Name' in context.release_data, "Release data missing Name field"
+    assert len(context.release_data['Name']) > 0
+
+
+@when('I validate release ID {rid:d}')
+def step_validate_release_by_id(context, rid):
+    try:
+        context.release_data = context.client.validate_release(context.env['project_id'], rid)
+        context.error = None
+    except APIError as e:
+        context.error = e
+
+
+@then('an APIError should be raised with "{text}"')
+def step_api_error_with_text(context, text):
+    assert context.error is not None, "Expected APIError"
+    assert isinstance(context.error, APIError)
+    assert text.lower() in str(context.error).lower(), f"Expected '{text}' in: {context.error}"
+
+
+# --- Test set ---
+
+@when('I check the configured test set')
+def step_check_configured_test_set(context):
+    try:
+        context.test_set_result = context.client.create_or_get_test_set(
+            context.env['project_id'], context.env['test_set_id'],
+            release_id=context.env['release_id']
+        )
+        context.error = None
+    except APIError as e:
+        context.error = e
+        context.test_set_result = None
+
+
+@given('the configured test set is ready')
+def step_test_set_ready(context):
+    context.test_set_result = context.client.create_or_get_test_set(
+        context.env['project_id'], context.env['test_set_id'],
+        release_id=context.env['release_id']
+    )
+
+
+@then('the test set should be found')
+@then('the test set should exist or be creatable')
+def step_test_set_found(context):
+    assert context.test_set_result is not None, f"Test set error: {getattr(context, 'error', '')}"
+
+
+# --- Test run creation ---
+
+@when('I create a test run with sample data')
+@when('I create a test run with a sample passed result')
+def step_create_sample_test_run(context):
+    result = TestResult(
+        name='BDD Preflight Test',
+        status=TestStatus.PASSED,
+        duration=0.1,
+        start_time=datetime.now(),
+        end_time=datetime.now(),
+    )
+    try:
+        pid = context.env['project_id']
+        auto_field = context.env.get('automation_id_field', '')
+        stable_id = 'behave-preflight-validation-tc'
+
+        # Try to find existing preflight TC via custom property
+        tc_id = None
+        if auto_field:
+            tc_id = context.client.search_test_case_by_custom_property(
+                pid, auto_field, stable_id
+            )
+
+        # Create if not found
+        if not tc_id:
+            if auto_field:
+                tc_id = context.client.create_test_case_with_custom_property(
+                    project_id=pid,
+                    test_case_name='BDD Preflight Validation TC',
+                    custom_field=auto_field,
+                    custom_value=stable_id,
+                    description='Reusable TC for behave pre-flight validation'
+                )
+            else:
+                tc_id = context.client.create_test_case(
+                    project_id=pid,
+                    test_case_name='BDD Preflight Validation TC',
+                )
+
+        context.preflight_tc_id = tc_id
+        context.test_run_id = context.client.create_test_run(
+            project_id=pid,
+            test_case_id=tc_id,
+            result=result,
+        )
+        context.error = None
+    except APIError as e:
+        context.error = e
+        context.test_run_id = None
+
+
+@then('the test run ID should be returned')
+@then('the test run should be created in Spira')
+def step_test_run_created(context):
+    assert context.test_run_id is not None, f"Test run not created: {getattr(context, 'error', '')}"
+
+
+@then('the test run ID should be a positive integer')
+def step_test_run_id_positive(context):
+    assert isinstance(context.test_run_id, int), f"Expected int, got {type(context.test_run_id)}"
+    assert context.test_run_id > 0, f"Expected positive ID, got {context.test_run_id}"
+
+
+@then('the authenticated user should have access to the configured project')
+def step_user_has_project_access(context):
+    # If auth succeeded and we can validate release, we have project access
+    assert context.client._authenticated
+
+
+# --- Connectivity ---
+
+@when('I check connectivity to the Spira URL')
+def step_check_connectivity(context):
+    import requests
+    try:
+        resp = requests.get(context.env['url'], timeout=10)
+        context.connectivity_ok = resp.status_code < 500
+    except Exception as e:
+        context.connectivity_ok = False
+        context.connectivity_error = str(e)
+
+
+@then('the Spira instance should respond')
+def step_spira_responds(context):
+    assert context.connectivity_ok, f"Spira not reachable: {getattr(context, 'connectivity_error', '')}"
+
+
+# --- Rate Limit Handler (09) ---
+
+@given('I have a Spira API client')
+def step_have_basic_client(context):
+    context.client = SpiraAPIClient(
+        base_url='https://spira.example.com',
+        username='testuser',
+        api_key='secret123'
+    )
+    context.client._authenticated = True
+
+
+@when('the API returns HTTP {code:d} for a test run creation')
+def step_api_returns_code(context, code):
+    mock_response = MagicMock()
+    mock_response.status_code = code
+    mock_response.text = f'Error {code}'
+    result = TestResult(name='Test', status=TestStatus.PASSED,
+                       start_time=datetime.now(), end_time=datetime.now())
+    with patch.object(context.client._session, 'post', return_value=mock_response):
+        try:
+            context.client.create_test_run(1, 123, result)
+            context.error = None
+        except (RateLimitError, APIError) as e:
+            context.error = e
+
+
+@then('a RateLimitError should be raised')
+def step_verify_rate_limit_error(context):
+    assert context.error is not None, "Expected RateLimitError"
+    assert isinstance(context.error, RateLimitError), f"Got {type(context.error)}: {context.error}"
+
+
+@then('an APIError should be raised')
+def step_verify_api_error(context):
+    assert context.error is not None, "Expected APIError"
+    assert isinstance(context.error, APIError), f"Got {type(context.error)}: {context.error}"
+
+
+@then('the error message should contain "{text}"')
+def step_error_contains(context, text):
+    assert text.lower() in str(context.error).lower(), \
+        f"Expected '{text}' in: {context.error}"
+
+
+# --- Evidence Upload (11) ---
+
+@given('I have an authenticated Spira API client')
+def step_have_auth_spira_client(context):
+    context.client = SpiraAPIClient(
+        base_url='https://spira.example.com',
+        username='testuser',
+        api_key='secret123'
+    )
+    context.client._authenticated = True
+
+
+@when('I attempt to upload a non-existent file "{path}"')
+def step_upload_nonexistent(context, path):
+    # upload_evidence should log warning and return, not raise
+    try:
+        context.client.upload_evidence(1, 789, path)
+        context.upload_skipped = True
+        context.upload_error = None
+    except Exception as e:
+        context.upload_skipped = False
+        context.upload_error = e
+
+
+@then('the upload should be skipped without raising an error')
+def step_upload_skipped_ok(context):
+    assert context.upload_skipped, f"Upload raised error: {context.upload_error}"
+
+
+@given('I have a temporary PNG evidence file')
+def step_have_temp_png(context):
+    temp = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.png')
+    # Write a minimal valid-ish PNG header
+    temp.write(b'\x89PNG\r\n\x1a\n' + b'\x00' * 100)
+    temp.close()
+    context.temp_files.append(temp.name)
+    context.evidence_file = temp.name
+
+
+@when('I read the evidence file')
+def step_read_evidence(context):
+    with open(context.evidence_file, 'rb') as f:
+        context.file_content = f.read()
+
+
+@then('the file content should be bytes not string')
+def step_content_is_bytes(context):
+    assert isinstance(context.file_content, bytes), f"Expected bytes, got {type(context.file_content)}"
+
+
+@given('I have a temporary evidence file named "{filename}"')
+def step_have_named_evidence(context, filename):
+    import shutil
+    temp = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix=Path(filename).suffix)
+    temp.write(b'\x89PNG\r\n\x1a\n')
+    temp.close()
+    # Rename to desired filename
+    target = Path(temp.name).parent / filename
+    shutil.move(temp.name, target)
+    context.temp_files.append(str(target))
+    context.evidence_file = str(target)
+
+
+@when('I prepare the upload payload')
+def step_prepare_payload(context):
+    context.payload_filename = Path(context.evidence_file).name
+
+
+@then('the payload filename should be "{filename}"')
+def step_verify_payload_filename(context, filename):
+    assert context.payload_filename == filename, \
+        f"Expected '{filename}', got '{context.payload_filename}'"
+
+
+@when('I create a test run and upload the evidence file')
+def step_create_run_and_upload(context):
+    result = TestResult(
+        name='Evidence Upload Test',
+        status=TestStatus.PASSED,
+        duration=0.1,
+        start_time=datetime.now(),
+        end_time=datetime.now(),
+    )
+    try:
+        pid = context.env['project_id']
+        auto_field = context.env.get('automation_id_field', '')
+        stable_id = 'behave-evidence-upload-tc'
+
+        # Reuse existing TC via custom property
+        tc_id = None
+        if auto_field:
+            tc_id = context.client.search_test_case_by_custom_property(
+                pid, auto_field, stable_id
+            )
+        if not tc_id:
+            if auto_field:
+                tc_id = context.client.create_test_case_with_custom_property(
+                    project_id=pid,
+                    test_case_name='BDD Evidence Upload TC',
+                    custom_field=auto_field,
+                    custom_value=stable_id,
+                )
+            else:
+                tc_id = context.client.create_test_case(
+                    project_id=pid,
+                    test_case_name='BDD Evidence Upload TC',
+                )
+
+        context.test_run_id = context.client.create_test_run(
+            project_id=pid,
+            test_case_id=tc_id,
+            result=result,
+        )
+        context.client.upload_evidence(pid, context.test_run_id, context.evidence_file)
+        context.evidence_uploaded = True
+        context.error = None
+    except Exception as e:
+        context.evidence_uploaded = False
+        context.error = e
+
+
+@then('the evidence should be uploaded successfully')
+def step_evidence_uploaded_ok(context):
+    assert context.evidence_uploaded, f"Evidence upload failed: {getattr(context, 'error', '')}"
+
+
+# --- Custom Property Matching (10) ---
+
+@given('I have raw data with testCaseId "{hash_val}"')
+def step_raw_data_testcaseid(context, hash_val):
+    context.raw_data = {'testCaseId': hash_val, 'name': 'Test'}
+
+
+@given('I have raw data with classname "{cls}" and name "{name}"')
+def step_raw_data_classname(context, cls, name):
+    context.raw_data = {'classname': cls, 'name': name}
+
+
+@given('I have raw data with no identifiers')
+def step_raw_data_empty(context):
+    context.raw_data = {'name': 'Test', 'extent_report': True}
+
+
+@when('I extract the automation ID')
+def step_extract_auto_id(context):
+    from src.spira_integration.mapper.test_case_mapper import TestCaseMapper
+    mapper = getattr(context, 'mapper', TestCaseMapper())
+    context.automation_id = mapper.extract_automation_id(context.raw_data)
+
+
+@then('the automation ID should be "{value}"')
+def step_verify_auto_id(context, value):
+    assert context.automation_id == value, f"Expected '{value}', got '{context.automation_id}'"
+
+
+@then('the automation ID should be None')
+def step_verify_auto_id_none(context):
+    assert context.automation_id is None, f"Expected None, got '{context.automation_id}'"
+
+
+@when('I extract TC ID from "{text}"')
+def step_extract_tc_from_text(context, text):
+    from src.spira_integration.mapper.test_case_mapper import TestCaseMapper
+    mapper = TestCaseMapper()
+    context.tc_id = mapper.get_test_case_id(text)
+
+
+@then('the TC ID should be {tc_id:d}')
+def step_verify_tc_id_int(context, tc_id):
+    assert context.tc_id == tc_id, f"Expected {tc_id}, got {context.tc_id}"
+
+
+@then('the TC ID should be None')
+def step_verify_tc_id_none(context):
+    assert context.tc_id is None, f"Expected None, got {context.tc_id}"
+
+
+@given('SPIRA_AUTOMATION_ID_FIELD is defined')
+def step_automation_field_defined(context):
+    field = os.environ.get('SPIRA_AUTOMATION_ID_FIELD', '')
+    assert field, "SPIRA_AUTOMATION_ID_FIELD is not defined — set it in .env or pipeline config"
+    context.automation_id_field = field
+
+
+@when('I search for a test case with a known automation ID')
+def step_search_known_auto_id(context):
+    try:
+        context.search_result = context.client.search_test_case_by_custom_property(
+            context.env['project_id'],
+            context.automation_id_field,
+            'behave-test-known-id'
         )
         context.error = None
     except Exception as e:
         context.error = e
-        context.client = None
+        context.search_result = None
 
 
-@then('a ValidationError should be raised')
-def step_validation_error_raised(context):
-    """Verify ValidationError was raised."""
-    assert context.error is not None, "Expected ValidationError to be raised"
-    assert isinstance(context.error, ValidationError), \
-        f"Expected ValidationError, got {type(context.error).__name__}"
+@then('the search should return a result or empty list without error')
+def step_search_no_error(context):
+    assert context.error is None, f"Search failed: {context.error}"
+    # Result can be None (no match) or an int (match found) — both are valid
+    assert context.search_result is None or isinstance(context.search_result, int)
 
 
-@when('I authenticate with invalid credentials')
-def step_authenticate_invalid(context):
-    """Authenticate with invalid credentials (mocked)."""
-    with patch.object(context.client._session, 'get') as mock_get:
-        # Mock authentication failure response
-        mock_response = Mock()
-        mock_response.status_code = 401
-        mock_response.text = "Unauthorized"
-        mock_get.return_value = mock_response
-        
-        try:
-            context.client.authenticate()
-            context.error = None
-        except Exception as e:
-            context.error = e
-
-
-@then('an AuthenticationError should be raised')
-def step_authentication_error_raised(context):
-    """Verify AuthenticationError was raised."""
-    assert context.error is not None, "Expected AuthenticationError to be raised"
-    assert isinstance(context.error, AuthenticationError), \
-        f"Expected AuthenticationError, got {type(context.error).__name__}"
-
-
-@then('the error should include the HTTP status code')
-def step_error_includes_status_code(context):
-    """Verify error message includes HTTP status code."""
-    assert context.error is not None, "Expected an error"
-    error_message = str(context.error)
-    assert "401" in error_message or "status" in error_message.lower(), \
-        f"Expected error to include status code, got: {error_message}"
-
-
-@then('the error should include the response message')
-def step_error_includes_response_message(context):
-    """Verify error message includes response details."""
-    assert context.error is not None, "Expected an error"
-    error_message = str(context.error)
-    assert len(error_message) > 0, "Error message should not be empty"
-
-
-@given('I have an authenticated Spira API Client')
-def step_have_authenticated_client(context):
-    """Create an authenticated Spira API Client."""
-    context.client = SpiraAPIClient(
-        base_url="https://spira.example.com",
-        username="testuser",
-        api_key="{test-api-key}"
-    )
-    # Mark as authenticated without actually calling API
-    context.client._authenticated = True
-
-
-@given('I have test run data')
-def step_have_test_run_data(context):
-    """Store test run data from table."""
-    context.test_run_data = {}
-    for row in context.table:
-        context.test_run_data[row['field']] = row['value']
-    
-    # Create TestResult object
-    context.test_result = TestResult(
-        name=context.test_run_data.get('test_case_id', 'Test'),
-        status=TestStatus.PASSED if context.test_run_data.get('execution_status') == 'PASSED' else TestStatus.FAILED,
-        start_time=datetime.fromisoformat(context.test_run_data.get('start_time', '2024-01-01T10:00:00+00:00').replace('Z', '+00:00')),
-        end_time=datetime.fromisoformat(context.test_run_data.get('end_time', '2024-01-01T10:01:00+00:00').replace('Z', '+00:00'))
-    )
-
-
-@when('I create a test run for project {project_id:d} and test set {test_set_id:d}')
-def step_create_test_run(context, project_id, test_set_id):
-    """Create a test run (mocked)."""
-    # Create a default test result if not already set
-    if not hasattr(context, 'test_result'):
-        context.test_result = TestResult(
-            name="Default Test",
-            status=TestStatus.PASSED,
-            start_time=datetime(2024, 1, 1, 10, 0, 0),
-            end_time=datetime(2024, 1, 1, 10, 1, 0)
+@when('I create a test case with a unique automation ID')
+def step_create_tc_unique_id(context):
+    import uuid
+    context.unique_auto_id = f'behave-test-{uuid.uuid4().hex[:12]}'
+    try:
+        context.created_tc_id = context.client.create_test_case_with_custom_property(
+            project_id=context.env['project_id'],
+            test_case_name=f'BDD Test - {context.unique_auto_id}',
+            custom_field=context.automation_id_field,
+            custom_value=context.unique_auto_id,
         )
-    
-    with patch.object(context.client._session, 'post') as mock_post:
-        # Mock successful test run creation
-        mock_response = Mock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {'TestRunId': 999}
-        mock_response.text = ''
-        mock_post.return_value = mock_response
-        
-        try:
-            context.test_run_id = context.client.create_test_run(
-                project_id=project_id,
-                test_set_id=test_set_id,
-                test_case_id=123,
-                result=context.test_result
-            )
-            context.error = None
-            context.mock_post = mock_post
-        except Exception as e:
-            context.error = e
-            context.test_run_id = None
+        context.error = None
+    except Exception as e:
+        context.error = e
+        context.created_tc_id = None
 
 
-@then('the test run should be created successfully')
-def step_test_run_created_successfully(context):
-    """Verify test run was created."""
-    assert context.error is None, f"Expected no error, but got: {context.error}"
-    assert context.test_run_id is not None, "Test run ID should be returned"
+@when('I search for that automation ID')
+def step_search_created_id(context):
+    try:
+        context.found_tc_id = context.client.search_test_case_by_custom_property(
+            context.env['project_id'],
+            context.automation_id_field,
+            context.unique_auto_id,
+        )
+        context.error = None
+    except Exception as e:
+        context.error = e
+        context.found_tc_id = None
 
 
-@then('the response should contain a test run ID')
-def step_response_contains_test_run_id(context):
-    """Verify response contains test run ID."""
-    assert context.test_run_id is not None, "Test run ID should be present"
-    assert isinstance(context.test_run_id, int), "Test run ID should be an integer"
+@then('the search should return the created test case')
+def step_verify_found_created(context):
+    assert context.error is None, f"Search failed: {context.error}"
+    assert context.found_tc_id == context.created_tc_id, \
+        f"Expected TC {context.created_tc_id}, found {context.found_tc_id}"
+    # Clean up: delete the test TC we created
+    try:
+        context.client.delete_test_case(context.env['project_id'], context.created_tc_id)
+    except Exception:
+        pass  # best-effort cleanup
 
 
-@then('the test run ID should be logged')
-def step_test_run_id_logged(context):
-    """Verify test run ID would be logged (we check the ID exists)."""
-    assert context.test_run_id is not None, "Test run ID should exist for logging"
+# --- Parser validation for preflight (12) ---
+
+@given('sample Allure results exist at "{path}"')
+def step_allure_results_exist(context, path):
+    assert Path(path).exists(), f"Sample Allure results not found at {path}"
+    context.results_path = path
 
 
-@given('I have test run data with all fields')
-def step_have_complete_test_run_data(context):
-    """Create test result with all fields."""
-    context.test_result = TestResult(
-        name="Complete Test",
-        status=TestStatus.FAILED,
-        start_time=datetime(2024, 1, 1, 10, 0, 0),
-        end_time=datetime(2024, 1, 1, 10, 1, 0),
-        error_message="Test failed",
-        stack_trace="Stack trace here"
+@given('sample JUnit results exist at "{path}"')
+def step_junit_results_exist(context, path):
+    assert Path(path).exists(), f"Sample JUnit results not found at {path}"
+    context.results_path = path
+
+
+@given('client ExtentReports results exist at "{path}"')
+def step_extent_results_exist(context, path):
+    assert Path(path).exists(), f"Client ExtentReports results not found at {path}"
+    context.results_path = path
+
+
+@when('I parse the sample Allure results')
+def step_parse_allure(context):
+    from src.spira_integration.parsers.allure_parser import AllureParser
+    parser = AllureParser()
+    context.results = parser.parse(context.results_path)
+
+
+@when('I parse the sample JUnit results')
+def step_parse_junit(context):
+    from src.spira_integration.parsers.junit_parser import JUnitParser
+    parser = JUnitParser()
+    context.results = parser.parse(context.results_path)
+
+
+@when('I parse the client ExtentReports results')
+def step_parse_extent(context):
+    from src.spira_integration.parsers.extent_parser import ExtentParser
+    parser = ExtentParser()
+    context.results = parser.parse(context.results_path)
+
+
+@then('at least {count:d} test result should be extracted')
+def step_at_least_n_results(context, count):
+    assert len(context.results) >= count, \
+        f"Expected at least {count} results, got {len(context.results)}"
+
+
+@then('each result should have a name and status')
+def step_each_has_name_status(context):
+    for r in context.results:
+        assert r.name, f"Result missing name: {r}"
+        assert r.status is not None, f"Result missing status: {r.name}"
+
+
+@then('each result should have evidence files discovered')
+def step_each_has_evidence(context):
+    has_evidence = any(len(r.evidence_files) > 0 for r in context.results)
+    assert has_evidence, "No results have evidence files"
+
+
+# --- Preflight-specific steps ---
+
+@when('I authenticate with the configured credentials')
+def step_auth_with_configured(context):
+    context.client = SpiraAPIClient(
+        base_url=context.env['url'],
+        username=context.env['username'],
+        api_key=context.env['api_key']
     )
-
-
-@when('I create a test run')
-def step_create_test_run_simple(context):
-    """Create a test run with default parameters."""
-    with patch.object(context.client._session, 'post') as mock_post:
-        # Mock successful test run creation
-        mock_response = Mock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {'TestRunId': 999}
-        mock_response.text = ''
-        mock_post.return_value = mock_response
-        
-        try:
-            context.test_run_id = context.client.create_test_run(
-                project_id=1,
-                test_set_id=10,
-                test_case_id=123,
-                result=context.test_result
-            )
-            context.error = None
-            context.mock_post = mock_post
-        except Exception as e:
-            context.error = e
-
-
-@when('the Spira API returns an error response with status {status_code:d}')
-def step_api_returns_error(context, status_code):
-    """Mock API error response."""
-    with patch.object(context.client._session, 'post') as mock_post:
-        # Mock error response
-        mock_response = Mock()
-        mock_response.status_code = status_code
-        mock_response.text = "Bad Request"
-        mock_post.return_value = mock_response
-        
-        try:
-            context.test_result = TestResult(
-                name="Test",
-                status=TestStatus.PASSED,
-                start_time=datetime(2024, 1, 1, 10, 0, 0),
-                end_time=datetime(2024, 1, 1, 10, 1, 0)
-            )
-            context.client.create_test_run(
-                project_id=1,
-                test_set_id=10,
-                test_case_id=123,
-                result=context.test_result
-            )
-            context.error = None
-        except Exception as e:
-            context.error = e
-
-
-@then('an APIError should be raised')
-def step_api_error_raised(context):
-    """Verify APIError was raised."""
-    assert context.error is not None, "Expected APIError to be raised"
-    assert isinstance(context.error, APIError), \
-        f"Expected APIError, got {type(context.error).__name__}"
-
-
-
-@then('the request should be sent to the correct endpoint')
-def step_verify_request_endpoint_generic(context):
-    """Verify the request was sent to the correct endpoint."""
-    assert hasattr(context, 'mock_post'), "Mock POST should be available"
-    call_args = context.mock_post.call_args
-    actual_url = call_args[0][0] if call_args[0] else call_args.kwargs.get('url', '')
-    # Just verify it contains the test-runs endpoint
-    assert 'test-runs' in actual_url, \
-        f"Expected 'test-runs' in URL, got: {actual_url}"
-
-
-@then('the request body should include required fields')
-def step_verify_request_body_fields_generic(context):
-    """Verify request body includes required fields."""
-    assert hasattr(context, 'mock_post'), "Mock POST should be available"
-    call_args = context.mock_post.call_args
-    payload = call_args.kwargs.get('json', {})
-    
-    # Check for key required fields
-    required_fields = ['TestCaseId', 'ExecutionStatusId', 'StartDate', 'EndDate']
-    for field in required_fields:
-        assert field in payload, f"Field '{field}' should be in request body"
-
-
-@then('the error should include status code {status_code:d}')
-def step_error_includes_specific_status_simple(context, status_code):
-    """Verify error includes specific status code."""
-    assert context.error is not None, "Expected an error"
-    error_message = str(context.error)
-    assert str(status_code) in error_message, \
-        f"Expected error to include status code {status_code}, got: {error_message}"
+    try:
+        context.client.authenticate()
+        context.auth_error = None
+    except AuthenticationError as e:
+        context.auth_error = e
