@@ -312,3 +312,34 @@ This document specifies requirements for a Python-based CI/CD integration tool t
 8. WHEN no matching Test Case is found and auto_create_test_cases is disabled, THE Integration_Script SHALL log a warning and skip the test result
 9. THE `automation_id_field` parameter SHALL be configurable via CLI argument or environment variable (SPIRA_AUTOMATION_ID_FIELD)
 10. WHEN `automation_id_field` is not configured, THE Integration_Script SHALL fall back to TC ID extraction from test names
+
+
+### Requirement 20: CLI Entry Point and Operational Modes
+
+**User Story:** As a DevOps engineer, I want a single command to run the integration tool in my pipeline, with modes for full execution and pre-flight validation.
+
+#### Acceptance Criteria
+
+1. THE tool SHALL be installable via `pip install` and provide a `spira-report` console command
+2. THE `spira-report` command SHALL accept an optional positional argument for the results path
+3. WHEN no results path is provided, THE tool SHALL check `SPIRA_RESULTS_DIR` environment variable
+4. WHEN neither positional argument nor `SPIRA_RESULTS_DIR` is provided, THE tool SHALL scan the current working directory
+5. THE tool SHALL auto-detect the test result format by scanning the resolved path using registered parsers
+6. WHEN `--preflight` flag is provided, THE tool SHALL validate configuration and Spira connectivity without processing results
+7. THE preflight mode SHALL verify authentication, release existence, and test set availability
+8. WHEN `--help` flag is provided, THE tool SHALL display usage information and available environment variables
+9. THE tool SHALL load configuration from a `.env` file if present, without overriding existing environment variables
+10. THE tool SHALL exit with code 0 on success and non-zero on failure
+
+### Requirement 21: Auto-Sense Results Discovery
+
+**User Story:** As a DevOps engineer, I want the tool to automatically find test results in my workspace, so I don't need to specify exact file paths.
+
+#### Acceptance Criteria
+
+1. THE tool SHALL scan the resolved results path for parseable test results
+2. THE tool SHALL use each registered parser's `can_parse()` method to identify result files or directories
+3. WHEN a single parseable result set is found, THE tool SHALL use it automatically
+4. WHEN multiple parseable result sets are found, THE tool SHALL use the first match and log all candidates
+5. WHEN no parseable results are found, THE tool SHALL exit with an error and descriptive message
+6. THE auto-sense SHALL check both files and immediate subdirectories of the scan path

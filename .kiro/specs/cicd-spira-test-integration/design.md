@@ -28,6 +28,29 @@ The architecture supports future additions:
 - pytest JSON parser
 - Cucumber Messages parser
 - Additional evidence formats
+
+### CLI Operational Modes
+
+The tool provides a `spira-report` console command with three modes:
+
+1. **Full Run** (`spira-report [path]`): Parse results, match TCs, create test runs, upload evidence
+2. **Pre-flight** (`spira-report --preflight`): Validate config and Spira connectivity only
+3. **Help** (`spira-report --help`): Display usage and environment variable reference
+
+**Results Path Resolution:**
+1. Positional CLI argument (highest priority)
+2. `SPIRA_RESULTS_DIR` environment variable
+3. Current working directory (fallback)
+
+**Auto-Sense Discovery:**
+- Scans the resolved path using each registered parser's `can_parse()` method
+- Checks both files and immediate subdirectories
+- Uses first match if multiple found, logs all candidates
+
+**Package Distribution:**
+- Installable via `pip install` from git or PyPI
+- Console script entry point: `spira-report` → `spira_integration.cli:main`
+- All configuration via environment variables (no config files required)
 - Advanced mapping strategies (regex, fuzzy matching)
 
 ## Architecture
