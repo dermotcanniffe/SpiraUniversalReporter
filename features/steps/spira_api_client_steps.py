@@ -234,9 +234,8 @@ def step_create_sample_test_run(context):
         context.preflight_tc_id = tc_id
         context.test_run_id = context.client.create_test_run(
             project_id=pid,
-            test_set_id=context.env['test_set_id'],
             test_case_id=tc_id,
-            result=result
+            result=result,
         )
         context.error = None
     except APIError as e:
@@ -301,7 +300,7 @@ def step_api_returns_code(context, code):
                        start_time=datetime.now(), end_time=datetime.now())
     with patch.object(context.client._session, 'post', return_value=mock_response):
         try:
-            context.client.create_test_run(1, 10, 123, result)
+            context.client.create_test_run(1, 123, result)
             context.error = None
         except (RateLimitError, APIError) as e:
             context.error = e
@@ -435,9 +434,8 @@ def step_create_run_and_upload(context):
 
         context.test_run_id = context.client.create_test_run(
             project_id=pid,
-            test_set_id=context.env['test_set_id'],
             test_case_id=tc_id,
-            result=result
+            result=result,
         )
         context.client.upload_evidence(pid, context.test_run_id, context.evidence_file)
         context.evidence_uploaded = True

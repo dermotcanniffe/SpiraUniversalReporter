@@ -116,7 +116,7 @@ def run_preflight():
     api_key = _get_env('SPIRA_API_KEY')
     project_id = int(_get_env('SPIRA_PROJECT_ID'))
     release_id = int(_get_env('SPIRA_RELEASE_ID'))
-    test_set_id = int(_get_env('SPIRA_TEST_SET_ID'))
+    test_set_id_str = _get_env('SPIRA_TEST_SET_ID', required=False)
 
     client = SpiraAPIClient(url, username, api_key)
 
@@ -128,9 +128,13 @@ def run_preflight():
     release = client.validate_release(project_id, release_id)
     print(f"  ✓ Release: {release.get('Name')}")
 
-    print(f"  Checking test set {test_set_id}...")
-    client.create_or_get_test_set(project_id, test_set_id, release_id=release_id)
-    print("  ✓ Test set OK")
+    if test_set_id_str:
+        test_set_id = int(test_set_id_str)
+        print(f"  Checking test set {test_set_id}...")
+        client.create_or_get_test_set(project_id, test_set_id, release_id=release_id)
+        print("  ✓ Test set OK")
+    else:
+        print("  ○ No test set configured (SPIRA_TEST_SET_ID not set)")
 
     print("Pre-flight passed.")
     return 0
@@ -143,7 +147,8 @@ def run(results_path=None):
     api_key = _get_env('SPIRA_API_KEY')
     project_id = int(_get_env('SPIRA_PROJECT_ID'))
     release_id = int(_get_env('SPIRA_RELEASE_ID'))
-    test_set_id = int(_get_env('SPIRA_TEST_SET_ID'))
+    test_set_id_str = _get_env('SPIRA_TEST_SET_ID', required=False)
+    test_set_id = int(test_set_id_str) if test_set_id_str else None
     auto_create_tc = _get_env('SPIRA_AUTO_CREATE_TEST_CASES', required=False) or 'true'
     auto_create_tc = auto_create_tc.lower() in ('true', '1', 'yes')
     automation_field = _get_env('SPIRA_AUTOMATION_ID_FIELD', required=False) or None
@@ -173,7 +178,12 @@ def run(results_path=None):
     client = SpiraAPIClient(url, username, api_key)
     client.authenticate()
     client.validate_release(project_id, release_id)
-    client.create_or_get_test_set(project_id, test_set_id, release_id=release_id)
+
+    # Load test set mappings if test set is configured
+    ts_mappings = {}
+    if test_set_id:
+        client.create_or_get_test_set(project_id, test_set_id, release_id=release_id)
+        ts_mappings = client.get_test_set_tc_mappings(project_id, test_set_id)
 
     # Process each result
     mapper = TestCaseMapper()
@@ -209,7 +219,20 @@ def run(results_path=None):
 
         # Create test run
         try:
-            run_id = client.create_test_run(project_id, test_set_id, tc_id, result)
+            tstc_id = ts_mappings.get(tc_id) if test_set_id else None
+
+            if test_set_id and not tstc_id:
+                logger.warning(
+                    f"⚠ TC:{tc_id} is not in Test Set {test_set_id}. "
+                    f"Run created but not linked to test set. "
+                    f"Add it: {url}/{project_id}/TestSet/{test_set_id}.aspx"
+                )
+
+            run_id = client.create_test_run(
+                project_id, tc_id, result,
+                test_set_id=test_set_id if tstc_id else None,
+                test_set_test_case_id=tstc_id
+            )
             summary.successful_uploads += 1
             status = "✓" if result.status.name == "PASSED" else "✗"
             logger.info(f"{status} TC:{tc_id} → Run #{run_id} [{result.status.name}]")

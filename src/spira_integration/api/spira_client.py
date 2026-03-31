@@ -321,9 +321,10 @@ class SpiraAPIClient:
     def create_test_run(
         self,
         project_id: int,
-        test_set_id: int,
         test_case_id: int,
-        result: TestResult
+        result: TestResult,
+        test_set_id: int = None,
+        test_set_test_case_id: int = None
     ) -> int:
         """
         Create a test run in Spira.
@@ -369,9 +370,13 @@ class SpiraAPIClient:
             "RunnerMessage": result.error_message or "Test completed",
             "RunnerStackTrace": result.stack_trace or "",
             "TestCaseId": test_case_id,
-            "TestSetId": test_set_id,
             "ExecutionStatusId": execution_status_id
         }
+        
+        if test_set_id:
+            payload["TestSetId"] = test_set_id
+        if test_set_test_case_id:
+            payload["TestSetTestCaseId"] = test_set_test_case_id
         
         headers = {
             'Accept': 'application/json',
@@ -624,6 +629,46 @@ class SpiraAPIClient:
 
         except requests.exceptions.RequestException as e:
             raise APIError(f"Failed to create test case: {str(e)}")
+
+    def get_test_set_tc_mappings(
+        self,
+        project_id: int,
+        test_set_id: int
+    ) -> dict:
+        """
+        Get the test case mappings for a test set.
+        Returns a dict of {TestCaseId: TestSetTestCaseId}.
+        """
+        if not self._authenticated:
+            self.authenticate()
+
+        endpoint = f'projects/{project_id}/test-sets/{test_set_id}/test-case-mapping'
+        url = self._build_url(endpoint)
+        headers = {'Accept': 'application/json'}
+
+        try:
+            response = self._session.get(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                timeout=30
+            )
+            if response.status_code == 200:
+                mappings = response.json()
+                result = {}
+                for m in mappings:
+                    tc_id = m.get('TestCaseId')
+                    tstc_id = m.get('TestSetTestCaseId')
+                    if tc_id and tstc_id:
+                        result[tc_id] = tstc_id
+                logger.info(f"Test set {test_set_id} has {len(result)} TC mappings")
+                return result
+            else:
+                logger.warning(f"Failed to get test set mappings: HTTP {response.status_code}")
+                return {}
+        except Exception as e:
+            logger.warning(f"Failed to get test set mappings: {e}")
+            return {}
 
     def delete_test_case(self, project_id: int, test_case_id: int) -> None:
         """
