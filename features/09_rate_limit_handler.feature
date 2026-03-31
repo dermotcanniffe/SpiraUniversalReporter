@@ -3,13 +3,19 @@ Feature: Rate Limit Handler
   I want the script to handle API rate limits gracefully
   So that pipeline execution is reliable
 
-  Scenario: Client raises RateLimitError on HTTP 429
+  Scenario: Retry with exponential backoff on HTTP 429
     Given I have a Spira API client
-    When the API returns HTTP 429 for a test run creation
-    Then a RateLimitError should be raised
-    And the error message should contain "Rate limit"
+    When the API returns HTTP 429 then 200
+    Then the request should succeed after retry
+    And the retry should have waited before retrying
 
-  Scenario: Client handles non-429 errors as APIError
+  Scenario: Raise RateLimitError after max retries exhausted
+    Given I have a Spira API client
+    When the API returns HTTP 429 for all retries
+    Then a RateLimitError should be raised
+    And the error message should contain "Rate limit exceeded"
+
+  Scenario: Non-429 errors are raised as APIError immediately
     Given I have a Spira API client
     When the API returns HTTP 500 for a test run creation
     Then an APIError should be raised

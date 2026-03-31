@@ -243,7 +243,7 @@ def run(results_path=None):
                     client.upload_evidence(project_id, run_id, evidence_path)
                     summary.evidence_uploaded += 1
                 except Exception as e:
-                    logger.warning(f"Evidence upload failed: {e}")
+                    logger.warning(f"Evidence upload failed for {evidence_path}: {e}")
 
         except APIError as e:
             summary.failed_uploads += 1

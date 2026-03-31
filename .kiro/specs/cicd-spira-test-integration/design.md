@@ -125,10 +125,14 @@ graph TD
 **Interface**:
 ```python
 class ConfigurationManager:
-    def load_config(self, cli_args: List[str], env_vars: Dict[str, str]) -> Configuration
-    def validate_config(self, config: Configuration) -> None
-    def mask_sensitive_values(self, config: Configuration) -> Configuration
+    def load_from_args(self, args: argparse.Namespace) -> Configuration
+    def load_from_dict(self, config_dict: dict) -> Configuration
+    def validate(self) -> None
+    def mask_sensitive_value(self, value: str) -> str
+    def get_masked_config(self) -> dict
 ```
+
+Note: The production CLI (`cli.py`) reads env vars directly via `os.environ.get()` for simplicity. `ConfigurationManager` is used by the demo script and BDD tests.
 
 **Configuration Parameters**:
 - `spira_url`: Spira instance URL (required)

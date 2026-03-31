@@ -42,7 +42,7 @@ This document specifies requirements for a Python-based CI/CD integration tool t
 
 1. THE Configuration_Manager SHALL accept Spira instance URL via command line argument or environment variable
 2. THE Configuration_Manager SHALL accept Spira project identifier via command line argument or environment variable
-3. THE Configuration_Manager SHALL accept Spira test set identifier via command line argument or environment variable
+3. THE Configuration_Manager SHALL accept Spira test set identifier via command line argument or environment variable (optional)
 4. THE Configuration_Manager SHALL accept Spira release identifier via command line argument or environment variable
 5. THE Configuration_Manager SHALL accept Spira username via command line argument or environment variable
 6. THE Configuration_Manager SHALL accept API_Key via command line argument or environment variable

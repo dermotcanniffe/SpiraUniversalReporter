@@ -83,6 +83,36 @@ class SpiraAPIClient:
             'username': self.username,
             'api-key': self.api_key
         }
+
+    def _request_with_retry(self, method, url, max_retries=3, **kwargs):
+        """
+        Make an HTTP request with exponential backoff on 429 responses.
+        
+        Args:
+            method: HTTP method ('get', 'post', 'delete')
+            url: Request URL
+            max_retries: Maximum retry attempts (default 3)
+            **kwargs: Passed to requests session method
+            
+        Returns:
+            Response object
+            
+        Raises:
+            RateLimitError: If all retries exhausted
+        """
+        import time
+        func = getattr(self._session, method)
+
+        for attempt in range(max_retries + 1):
+            response = func(url, **kwargs)
+            if response.status_code != 429:
+                return response
+            if attempt < max_retries:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning(f"Rate limited (429). Retry {attempt + 1}/{max_retries} in {wait}s...")
+                time.sleep(wait)
+
+        raise RateLimitError(f"Rate limit exceeded after {max_retries} retries")
     
     def authenticate(self) -> None:
         """
@@ -384,17 +414,15 @@ class SpiraAPIClient:
         }
         
         try:
-            response = self._session.post(
-                url,
+            response = self._request_with_retry(
+                'post', url,
                 params=self._get_auth_params(),
                 headers=headers,
                 json=payload,
                 timeout=30
             )
             
-            if response.status_code == 429:
-                raise RateLimitError("Rate limit exceeded")
-            elif response.status_code not in (200, 201):
+            if response.status_code not in (200, 201):
                 raise APIError(
                     f"Failed to create test run: HTTP {response.status_code} - {response.text}"
                 )

@@ -298,7 +298,7 @@ def step_api_returns_code(context, code):
     mock_response.text = f'Error {code}'
     result = TestResult(name='Test', status=TestStatus.PASSED,
                        start_time=datetime.now(), end_time=datetime.now())
-    with patch.object(context.client._session, 'post', return_value=mock_response):
+    with patch.object(context.client, '_request_with_retry', return_value=mock_response) as mock_req:
         try:
             context.client.create_test_run(1, 123, result)
             context.error = None
@@ -646,3 +646,50 @@ def step_auth_with_configured(context):
         context.auth_error = None
     except AuthenticationError as e:
         context.auth_error = e
+
+
+# --- Retry logic tests ---
+
+@when('the API returns HTTP 429 then 200')
+def step_429_then_200(context):
+    mock_429 = MagicMock()
+    mock_429.status_code = 429
+    mock_200 = MagicMock()
+    mock_200.status_code = 200
+    mock_200.json.return_value = {'TestRunId': 999}
+    with patch.object(context.client._session, 'post', side_effect=[mock_429, mock_200]):
+        with patch('time.sleep') as mock_sleep:
+            result = TestResult(name='Test', status=TestStatus.PASSED,
+                               start_time=datetime.now(), end_time=datetime.now())
+            try:
+                context.test_run_id = context.client.create_test_run(1, 123, result)
+                context.retry_error = None
+                context.mock_sleep = mock_sleep
+            except Exception as e:
+                context.retry_error = e
+
+
+@then('the request should succeed after retry')
+def step_retry_succeeded(context):
+    assert context.retry_error is None, f"Expected success, got: {context.retry_error}"
+    assert context.test_run_id == 999
+
+
+@then('the retry should have waited before retrying')
+def step_retry_waited(context):
+    context.mock_sleep.assert_called()
+
+
+@when('the API returns HTTP 429 for all retries')
+def step_429_all_retries(context):
+    mock_429 = MagicMock()
+    mock_429.status_code = 429
+    with patch.object(context.client._session, 'post', return_value=mock_429):
+        with patch('time.sleep'):
+            result = TestResult(name='Test', status=TestStatus.PASSED,
+                               start_time=datetime.now(), end_time=datetime.now())
+            try:
+                context.client.create_test_run(1, 123, result)
+                context.error = None
+            except RateLimitError as e:
+                context.error = e
