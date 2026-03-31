@@ -625,6 +625,36 @@ class SpiraAPIClient:
         except requests.exceptions.RequestException as e:
             raise APIError(f"Failed to create test case: {str(e)}")
 
+    def delete_test_case(self, project_id: int, test_case_id: int) -> None:
+        """
+        Delete a test case from Spira. Used for test cleanup.
+
+        Args:
+            project_id: Spira project ID
+            test_case_id: Test case ID to delete
+        """
+        if not self._authenticated:
+            self.authenticate()
+
+        endpoint = f'projects/{project_id}/test-cases/{test_case_id}'
+        url = self._build_url(endpoint)
+
+        headers = {'Accept': 'application/json'}
+
+        try:
+            response = self._session.delete(
+                url,
+                params=self._get_auth_params(),
+                headers=headers,
+                timeout=30
+            )
+            if response.status_code in (200, 204):
+                logger.info(f"Deleted test case {test_case_id}")
+            else:
+                logger.warning(f"Failed to delete TC {test_case_id}: HTTP {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Failed to delete TC {test_case_id}: {e}")
+
     def upload_evidence(
         self,
         project_id: int,

@@ -204,14 +204,36 @@ def step_create_sample_test_run(context):
         end_time=datetime.now(),
     )
     try:
-        # Create a test case first to ensure it exists
-        tc_id = context.client.create_test_case(
-            project_id=context.env['project_id'],
-            test_case_name='BDD Preflight Validation TC',
-            description='Auto-created by behave pre-flight validation'
-        )
+        pid = context.env['project_id']
+        auto_field = context.env.get('automation_id_field', '')
+        stable_id = 'behave-preflight-validation-tc'
+
+        # Try to find existing preflight TC via custom property
+        tc_id = None
+        if auto_field:
+            tc_id = context.client.search_test_case_by_custom_property(
+                pid, auto_field, stable_id
+            )
+
+        # Create if not found
+        if not tc_id:
+            if auto_field:
+                tc_id = context.client.create_test_case_with_custom_property(
+                    project_id=pid,
+                    test_case_name='BDD Preflight Validation TC',
+                    custom_field=auto_field,
+                    custom_value=stable_id,
+                    description='Reusable TC for behave pre-flight validation'
+                )
+            else:
+                tc_id = context.client.create_test_case(
+                    project_id=pid,
+                    test_case_name='BDD Preflight Validation TC',
+                )
+
+        context.preflight_tc_id = tc_id
         context.test_run_id = context.client.create_test_run(
-            project_id=context.env['project_id'],
+            project_id=pid,
             test_set_id=context.env['test_set_id'],
             test_case_id=tc_id,
             result=result
@@ -387,22 +409,37 @@ def step_create_run_and_upload(context):
         end_time=datetime.now(),
     )
     try:
-        # Create a TC first
-        tc_id = context.client.create_test_case(
-            project_id=context.env['project_id'],
-            test_case_name='BDD Evidence Upload TC',
-        )
+        pid = context.env['project_id']
+        auto_field = context.env.get('automation_id_field', '')
+        stable_id = 'behave-evidence-upload-tc'
+
+        # Reuse existing TC via custom property
+        tc_id = None
+        if auto_field:
+            tc_id = context.client.search_test_case_by_custom_property(
+                pid, auto_field, stable_id
+            )
+        if not tc_id:
+            if auto_field:
+                tc_id = context.client.create_test_case_with_custom_property(
+                    project_id=pid,
+                    test_case_name='BDD Evidence Upload TC',
+                    custom_field=auto_field,
+                    custom_value=stable_id,
+                )
+            else:
+                tc_id = context.client.create_test_case(
+                    project_id=pid,
+                    test_case_name='BDD Evidence Upload TC',
+                )
+
         context.test_run_id = context.client.create_test_run(
-            project_id=context.env['project_id'],
+            project_id=pid,
             test_set_id=context.env['test_set_id'],
             test_case_id=tc_id,
             result=result
         )
-        context.client.upload_evidence(
-            context.env['project_id'],
-            context.test_run_id,
-            context.evidence_file
-        )
+        context.client.upload_evidence(pid, context.test_run_id, context.evidence_file)
         context.evidence_uploaded = True
         context.error = None
     except Exception as e:
@@ -530,6 +567,11 @@ def step_verify_found_created(context):
     assert context.error is None, f"Search failed: {context.error}"
     assert context.found_tc_id == context.created_tc_id, \
         f"Expected TC {context.created_tc_id}, found {context.found_tc_id}"
+    # Clean up: delete the test TC we created
+    try:
+        context.client.delete_test_case(context.env['project_id'], context.created_tc_id)
+    except Exception:
+        pass  # best-effort cleanup
 
 
 # --- Parser validation for preflight (12) ---
