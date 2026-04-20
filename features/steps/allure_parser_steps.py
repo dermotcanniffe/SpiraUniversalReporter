@@ -319,3 +319,64 @@ def step_verify_supported_types(context):
     # In Allure, all attachment types are supported
     # This is more of a documentation step
     assert len(context.file_types_tested) > 0, "No file types tested"
+
+
+# --- Directory parsing steps ---
+
+import os
+import shutil
+
+
+@given('I have a directory with {count:d} Allure result files')
+def step_have_dir_with_n_results(context, count):
+    temp_dir = tempfile.mkdtemp()
+    context.temp_files.append(temp_dir)
+    for i in range(count):
+        data = {
+            "uuid": f"test-{i}",
+            "name": f"Test {i+1}",
+            "status": "passed",
+            "start": 1234567890000 + i * 1000,
+            "stop": 1234567891000 + i * 1000
+        }
+        with open(os.path.join(temp_dir, f'{i:08x}-result.json'), 'w') as f:
+            json.dump(data, f)
+    context.test_file = temp_dir
+
+
+@given('I have a directory with {result_count:d} result files and {container_count:d} container files')
+def step_have_dir_with_results_and_containers(context, result_count, container_count):
+    temp_dir = tempfile.mkdtemp()
+    context.temp_files.append(temp_dir)
+    for i in range(result_count):
+        data = {"uuid": f"test-{i}", "name": f"Test {i+1}", "status": "passed"}
+        with open(os.path.join(temp_dir, f'{i:08x}-result.json'), 'w') as f:
+            json.dump(data, f)
+    for i in range(container_count):
+        data = {"uuid": f"container-{i}", "name": f"Suite {i+1}", "children": []}
+        with open(os.path.join(temp_dir, f'{i:08x}-container.json'), 'w') as f:
+            json.dump(data, f)
+    context.test_file = temp_dir
+
+
+@given('I have a directory with {count:d} Allure result file')
+def step_have_dir_with_one_result(context, count):
+    step_have_dir_with_n_results(context, count)
+
+
+@then('can_parse should return true for the directory')
+def step_can_parse_true_dir(context):
+    assert context.parser.can_parse(context.test_file), \
+        f"can_parse returned False for {context.test_file}"
+
+
+@then('can_parse should return false for the directory')
+def step_can_parse_false_dir(context):
+    assert not context.parser.can_parse(context.test_file), \
+        f"can_parse returned True for {context.test_file}"
+
+
+@given('client Allure results exist at "{path}"')
+def step_client_allure_exists(context, path):
+    assert Path(path).exists(), f"Client Allure results not found at {path}"
+    context.test_file = path

@@ -88,3 +88,33 @@ Feature: Allure JSON Parser
     When I attempt to parse the file
     Then a ParseError should be raised
     And the error message should indicate "Invalid JSON format"
+
+  Scenario: Parse directory containing multiple result files
+    Given I have an Allure parser
+    And I have a directory with 3 Allure result files
+    When I parse the directory
+    Then I should get 3 test results
+    And each result should have a name and status
+
+  Scenario: Skip container files when parsing directory
+    Given I have an Allure parser
+    And I have a directory with 2 result files and 3 container files
+    When I parse the directory
+    Then I should get 2 test results
+
+  Scenario: Detect Allure directory via can_parse
+    Given I have an Allure parser
+    And I have a directory with 1 Allure result file
+    Then can_parse should return true for the directory
+
+  Scenario: can_parse returns false for empty directory
+    Given I have an Allure parser
+    And I have an empty directory
+    Then can_parse should return false for the directory
+
+  Scenario: Parse client Allure results directory
+    Given I have an Allure parser
+    And client Allure results exist at "examples/client-report/allure-results"
+    When I parse the directory
+    Then I should get 2 test results
+    And each result should have evidence files discovered
