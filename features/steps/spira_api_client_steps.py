@@ -613,25 +613,6 @@ def step_parse_extent(context):
     context.results = parser.parse(context.results_path)
 
 
-@then('at least {count:d} test result should be extracted')
-def step_at_least_n_results(context, count):
-    assert len(context.results) >= count, \
-        f"Expected at least {count} results, got {len(context.results)}"
-
-
-@then('each result should have a name and status')
-def step_each_has_name_status(context):
-    for r in context.results:
-        assert r.name, f"Result missing name: {r}"
-        assert r.status is not None, f"Result missing status: {r.name}"
-
-
-@then('each result should have evidence files discovered')
-def step_each_has_evidence(context):
-    has_evidence = any(len(r.evidence_files) > 0 for r in context.results)
-    assert has_evidence, "No results have evidence files"
-
-
 # --- Preflight-specific steps ---
 
 @when('I authenticate with the configured credentials')

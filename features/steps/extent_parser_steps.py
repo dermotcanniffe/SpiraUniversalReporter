@@ -62,16 +62,6 @@ def step_have_extent_dir_with_n_tests(context, count):
     _make_summary_dir(context, nodes)
 
 
-@when('I parse the directory')
-def step_parse_directory(context):
-    try:
-        context.results = context.parser.parse(context.test_file)
-        context.error = None
-    except ParseError as e:
-        context.error = e
-        context.results = []
-
-
 @given('I have a Summary.html with test "{name}"')
 def step_have_summary_with_test(context, name):
     step = STEP_ROW.format(status='pass', time='6:55:58 PM', details='OK')
@@ -223,13 +213,6 @@ def step_parse_top_level(context):
 def step_verify_found_summary(context):
     assert context.error is None, f"Parser error: {context.error}"
     assert len(context.results) > 0, "No results parsed"
-
-
-@given('I have an empty directory')
-def step_have_empty_dir(context):
-    temp_dir = tempfile.mkdtemp()
-    context.temp_files.append(temp_dir)
-    context.test_file = temp_dir
 
 
 @when('I attempt to parse the directory')
