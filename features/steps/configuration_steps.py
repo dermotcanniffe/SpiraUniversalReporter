@@ -189,22 +189,6 @@ def step_verify_config_error_raised(context):
         f"Expected ConfigurationError or ValidationError, got {type(context.data.error)}"
 
 
-@then('the error message should indicate "{message}"')
-def step_verify_error_message(context, message):
-    """Verify error message contains expected text."""
-    # Check both context.data.error and context.error for compatibility
-    error = getattr(context, 'error', None) or getattr(context.data, 'error', None) if hasattr(context, 'data') else None
-    assert error is not None, "No error was raised"
-    error_msg = str(error).lower()
-    
-    # Normalize the expected message for flexible matching
-    # "spira-url is required" should match "url is required"
-    normalized_message = message.lower().replace('spira-', '').replace('-', ' ')
-    
-    assert normalized_message in error_msg or message.lower() in error_msg, \
-        f"Expected '{message}' in error message, got: {error}"
-
-
 @when('I provide an invalid URL "{url}"')
 def step_provide_invalid_url(context, url):
     """Provide an invalid URL."""
