@@ -16,53 +16,103 @@ class AllureParser(TestResultParser):
     format_name = 'allure-json'
 
     def can_parse(self, file_path: str) -> bool:
-        """Detect Allure JSON by extension and uuid/status fields."""
-        import json as _json
+        """Detect Allure JSON — a single result file or a directory containing *-result.json files."""
         path = Path(file_path)
-        if not path.is_file() or path.suffix != '.json':
-            return False
+
+        # Single file
+        if path.is_file() and path.suffix == '.json':
+            return self._is_allure_result(path)
+
+        # Directory containing *-result.json files
+        if path.is_dir():
+            return any(
+                self._is_allure_result(f)
+                for f in path.glob('*-result.json')
+            )
+
+        return False
+
+    def _is_allure_result(self, path: Path) -> bool:
+        """Check if a JSON file is an Allure result (has uuid + status)."""
         try:
-            with open(file_path, 'r') as f:
-                data = _json.load(f)
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
             if isinstance(data, dict):
                 return 'uuid' in data and 'status' in data
-            elif isinstance(data, list) and len(data) > 0:
+            if isinstance(data, list) and len(data) > 0:
                 return 'uuid' in data[0] and 'status' in data[0]
             return False
         except Exception:
             return False
-    
+
     def parse(self, file_path: str) -> List[TestResult]:
         """
-        Parse Allure JSON test results.
-        
+        Parse Allure JSON test results from a file or directory.
+
         Args:
-            file_path: Path to Allure JSON file
-            
+            file_path: Path to a single Allure JSON file, or a directory
+                       containing *-result.json files (standard Allure output)
+
         Returns:
             List of TestResult objects
-            
+
         Raises:
-            ParseError: If file cannot be parsed
+            ParseError: If no results can be parsed
         """
+        path = Path(file_path)
+
+        if path.is_dir():
+            return self._parse_directory(path)
+        elif path.is_file():
+            return self._parse_file(path)
+        else:
+            raise ParseError(f"Path does not exist: {file_path}")
+
+    def _parse_directory(self, directory: Path) -> List[TestResult]:
+        """Parse all *-result.json files in an Allure results directory."""
+        result_files = sorted(directory.glob('*-result.json'))
+
+        if not result_files:
+            # Fallback: try any .json file that looks like an Allure result
+            result_files = [
+                f for f in sorted(directory.glob('*.json'))
+                if self._is_allure_result(f)
+            ]
+
+        if not result_files:
+            raise ParseError(f"No Allure result files found in: {directory}")
+
+        all_results = []
+        for result_file in result_files:
+            try:
+                results = self._parse_file(result_file)
+                all_results.extend(results)
+            except ParseError as e:
+                # Log but continue — one bad file shouldn't stop the whole batch
+                import logging
+                logging.getLogger(__name__).warning(f"Skipping {result_file.name}: {e}")
+
+        return all_results
+
+    def _parse_file(self, file_path: Path) -> List[TestResult]:
+        """Parse a single Allure JSON file."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ParseError(f"Invalid JSON format: {e}")
+            raise ParseError(f"Invalid JSON format in {file_path.name}: {e}")
         except Exception as e:
-            raise ParseError(f"Failed to read file: {e}")
+            raise ParseError(f"Failed to read {file_path.name}: {e}")
         
-        # Handle both single result and array of results
         if isinstance(data, dict):
             results = [data]
         elif isinstance(data, list):
             results = data
         else:
-            raise ParseError("Allure JSON must be an object or array")
+            raise ParseError(f"Allure JSON must be an object or array: {file_path.name}")
         
         test_results = []
-        results_dir = Path(file_path).parent
+        results_dir = file_path.parent
         
         for result in results:
             test_result = self._parse_single_result(result, results_dir)
