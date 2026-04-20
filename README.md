@@ -1,19 +1,20 @@
 # Spira CI/CD Test Integration
 
-Python-based CLI tool that parses test results from CI/CD pipelines and transmits them to Spira test management system via REST API.
+Parse test results from any CI/CD pipeline and send them to Spira test management -- automatically.
 
-## Features
+```bash
+pip install git+https://github.com/dermotcanniffe/SpiraUniversalReporter.git
+spira-report ./test-results/
+```
 
-- **Automatic Format Detection** - Detects JUnit XML or Allure JSON automatically
-- **Smart Test Case Mapping** - Extracts TC IDs from test names (no mapping files needed)
-- **Auto-Create Test Cases** - Creates missing test cases in Spira automatically
-- **Parse Multiple Formats** - JUnit XML (TestNG) and Allure JSON (Cypress)
-- **Send Results to Spira** - Creates test runs via REST API with full details
-- **Attach Evidence Files** - Screenshots, videos, logs (coming soon)
-- **Secure Credentials** - CLI args or environment variables
-- **CI/CD Ready** - Works in any pipeline (GitHub Actions, GitLab CI, Jenkins)
+## What It Does
 
-## How It Works
+- Auto-detects test result format (Allure JSON, JUnit XML, ExtentReports HTML)
+- Matches tests to Spira test cases via custom properties -- no test code changes needed
+- Creates test runs with pass/fail status, timestamps, errors, and stack traces
+- Uploads evidence (screenshots, videos, logs) as attachments
+- Auto-creates test cases in Spira when new tests appear
+- Pluggable parser architecture -- add support for any format
 
 ```mermaid
 flowchart TD
@@ -21,264 +22,42 @@ flowchart TD
     B --> C{Detect Format}
     C -->|.xml| D[JUnit XML Parser]
     C -->|.json| E[Allure JSON Parser]
-    
-    D --> F[Extract Test Results & Evidence Paths]
-    E --> F
-    
-    F --> G[For Each Test Result]
-    G --> H[Extract Stable Test ID]
-    H --> I{Search Spira Custom Property}
-    
-    I -->|Match Found| J[Use Existing TC ID]
-    I -->|No Match| K{Auto-Create Enabled?}
-    
-    K -->|Yes| L[Create TC in Spira\nSet Custom Property with Hash]
-    K -->|No| M[Skip / Log Warning]
-    
-    L --> N[Create Test Run in Spira]
-    J --> N
-    
-    N --> O{Evidence Files?}
-    O -->|Yes| P[Upload Screenshots / Videos / Logs]
-    O -->|No| Q[Next Test Result]
-    P --> Q
-    
-    Q --> G
-    
-    style A fill:#2d6a4f,color:#fff
-    style N fill:#1d3557,color:#fff
-    style L fill:#e76f51,color:#fff
-    style J fill:#264653,color:#fff
+    C -->|directory| F[ExtentReports HTML Parser]
+    D --> G[Extract Results & Evidence]
+    E --> G
+    F --> G
+    G --> H[Match to Spira Test Cases]
+    H --> I[Create Test Runs]
+    I --> J[Upload Evidence]
 ```
 
-The tool is fully stateless — no local mapping files, no repo commits. It's cloned fresh each pipeline run and uses Spira as the single source of truth for test case matching via a configurable custom property (e.g. `Custom_04`).
+## Quick Start
 
-## Supported Test Result Formatsrgs or environment variables
-- **CI/CD Ready** - Works in any pipeline (GitHub Actions, GitLab CI, Jenkins)
-
-
-## Supported Test Result Formats
-
-### Automatic Format Detection
-
-The tool automatically detects the test result format using a two-step process:
-
-1. **File Extension Check**
-   - `.xml` files → Checks for JUnit XML format
-   - `.json` files → Checks for Allure JSON format
-
-2. **Content Validation**
-   - **JUnit XML**: Validates root element is `<testsuite>` or `<testsuites>`
-   - **Allure JSON**: Validates presence of `uuid` and `status` fields
-
-### Supported Formats
-
-#### Allure JSON (Cypress, Playwright, etc.)
-```json
-{
-  "uuid": "test-uuid-1",
-  "name": "User can login [TC:123]",
-  "status": "passed",
-  "start": 1234567890000,
-  "stop": 1234567892000
-}
-```
-
-**Detection criteria:**
-I can't help with opening a chat panel as that's outside my capabilities. I'm designed to assist with software development tasks like code analysis, file editing, shell commands, and technical guidance.
-
-If you need help with the Spira CI/CD integration code or any other development work, I'd be happy to assist with that!
-- Required fields: `uuid`, `status`
-- Supports both single object and array of objects
-
-#### JUnit XML (TestNG, Maven Surefire, etc.)
-```xml
-<testsuite name="Test Suite">
-  <testcase name="User can login [TC:123]" time="2.5">
-    <failure message="Assertion failed">...</failure>
-  </testcase>
-</testsuite>
-```
-
-**Detection criteria:**
-- File extension: `.xml`
-- Root element: `<testsuite>` or `<testsuites>`
-
-### Manual Format Override
-
-If auto-detection fails or you want to be explicit:
+1. Set your Spira credentials as environment variables (see [Configuration](docs/configuration.md))
+2. Point the tool at your test results:
 
 ```bash
-# Via command line
---result-type allure-json
-
-# Via environment variable
-SPIRA_RESULT_TYPE=allure-json
+spira-report ./test-results/       # explicit path
+spira-report                       # auto-discovers from SPIRA_RESULTS_DIR or cwd
+spira-report --preflight           # validate setup without sending results
 ```
 
-## Test Case Mapping
+## Documentation
 
-### Automatic TC ID Extraction
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation, first run, preflight validation |
+| [Configuration](docs/configuration.md) | Environment variables, .env setup, API key |
+| [CI/CD Integration](docs/ci-cd-integration.md) | GitLab, GitHub Actions, Jenkins, Azure DevOps examples |
+| [Parsers](docs/parsers.md) | Supported formats, what's extracted, custom parser guide |
+| [Test Case Matching](docs/tc-matching.md) | Custom property flow, regex fallback, test set linkage |
+| [Architecture](docs/architecture.md) | Project structure, plugin system, data models |
 
-The tool automatically extracts Spira test case IDs from test names. No mapping files needed!
+## Known Limitations
 
-**Supported formats:**
-- `[TC:123]` - Recommended (clear and visible)
-- `TC-123:` - Prefix style
-- `(TC:123)` - Parentheses style
-- `TC123` - Compact style
+- Test set linkage requires TCs to be pre-added to the test set in Spira (REST API limitation). The tool logs a warning with a direct Spira link when a TC isn't in the specified test set.
+- `SPIRA_TEST_SET_ID` is optional. Test runs are created regardless -- they just won't be grouped under a test set if the TC isn't a member.
 
-**Example test names:**
-```json
-{
-  "name": "User can login successfully [TC:707]"
-}
-```
+## License
 
-```xml
-<testcase name="TC-708: User cannot login with invalid credentials">
-```
-
-**Also checks:**
-- Allure labels: `testCaseId` label
-- Test descriptions: Searches for TC patterns
-- Full test names: Checks complete test path
-
-### Auto-Create Missing Test Cases
-
-By default, the tool creates test cases in Spira if they don't exist:
-
-```bash
-# Enable (default)
-SPIRA_AUTO_CREATE_TEST_CASES=true
-
-# Disable
-SPIRA_AUTO_CREATE_TEST_CASES=false
-```
-
-When enabled:
-1. Tries to create test run with specified TC ID
-2. If TC doesn't exist (404 error), creates the test case automatically
-3. Then creates the test run with the new TC ID
-4. Logs the new TC ID for reference
-
-## Installation
-
-```bash
-pip install -r requirements.txt
-```
-
-## Configuration
-
-### Setting up Spira Credentials
-
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` and fill in your Spira instance details:
-   ```bash
-   SPIRA_URL=https://your-company.spiraservice.net
-   SPIRA_USERNAME=your_username
-   SPIRA_API_KEY={your-api-key-with-curly-braces}
-   SPIRA_PROJECT_ID=1
-   SPIRA_TEST_SET_ID=1
-   ```
-
-3. Get your Spira API Key:
-   - Log into your Spira instance
-   - Go to your user profile (top right)
-   - Navigate to "RSS Tokens" or "API Keys"
-   - Copy your API key (include the curly braces)
-
-### Testing Your Connection
-
-Run the connection test script to verify your credentials:
-
-```bash
-python test_spira_connection.py
-```
-
-This will:
-- Load credentials from your `.env` file
-- Initialize the Spira API client
-- Test authentication
-- Report success or any errors
-
-## Usage
-
-### Command Line
-
-```bash
-python -m spira_integration.cli \
-  --url https://your-company.spiraservice.net \
-  --project-id 1 \
-  --test-set-id 10 \
-  --username your_username \
-  --api-key {your-api-key} \
-  --results-file path/to/results.json \
-  --result-type allure-json
-```
-
-### Using Environment Variables
-
-Set environment variables and run with minimal arguments:
-
-```bash
-export SPIRA_URL=https://your-company.spiraservice.net
-export SPIRA_USERNAME=your_username
-export SPIRA_API_KEY={your-api-key}
-export SPIRA_PROJECT_ID=1
-export SPIRA_TEST_SET_ID=10
-
-python -m spira_integration.cli --results-file path/to/results.json
-```
-
-### Demo Mode (Parsing Only)
-
-Test the parser without sending to Spira:
-
-```bash
-python run_demo.py
-```
-
-This will parse the sample Allure results and display them without making API calls.
-
-## Development
-
-### Run BDD Tests
-
-```bash
-behave features/
-```
-
-### Run Specific Feature
-
-```bash
-behave features/08_spira_api_client.feature
-```
-
-### Project Structure
-
-```
-src/spira_integration/
-├── api/
-│   └── spira_client.py      # Spira REST API client
-├── config/
-│   └── config_manager.py    # Configuration management
-├── parsers/
-│   ├── allure_parser.py     # Allure JSON parser
-│   ├── junit_parser.py      # JUnit XML parser
-│   └── parser_factory.py    # Parser factory
-├── models.py                # Data models
-├── exceptions.py            # Custom exceptions
-└── cli.py                   # CLI entry point
-```
-
-## Security Notes
-
-- Never commit your `.env` file to version control
-- The `.env` file is already in `.gitignore`
-- API keys are masked in logs (only first 4 characters shown)
-- Use environment variables in CI/CD pipelines instead of hardcoding credentials
+Internal tool -- not for public distribution.
