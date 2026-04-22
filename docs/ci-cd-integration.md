@@ -96,3 +96,4 @@ Store secrets under Pipelines > Library > Variable groups.
 - Run the reporting step with `when: always` / `continue-on-error` so results are sent even when tests fail
 - Exit code 0 = success, non-zero = failure
 - Use `spira-report --preflight` as an early pipeline stage to catch config issues before tests run
+- For corporate environments with internal SSL certificates, set `SPIRA_SSL_VERIFY=false`

@@ -1,6 +1,33 @@
 # Configuration
 
-All configuration is via environment variables. For local development, create a `.env` file from `.env.example`.
+Configuration can be provided via CLI arguments, environment variables, or a `.env` file. Priority: CLI args > env vars > .env file.
+
+## CLI Arguments
+
+All environment variables can also be passed as CLI arguments:
+
+```bash
+spira-report --url https://company.spiraservice.net \
+             --username user@company.com \
+             --api-key "{00000000-0000-0000-0000-000000000000}" \
+             --project-id 25 \
+             --release-id 155 \
+             --results-file ./target/surefire-reports
+```
+
+| CLI Argument | Env Variable | Description |
+|-------------|-------------|-------------|
+| `--url` | `SPIRA_URL` | Spira instance URL (required) |
+| `--username` | `SPIRA_USERNAME` | Spira username (required) |
+| `--api-key` | `SPIRA_API_KEY` | Spira API key with curly braces (required) |
+| `--project-id` | `SPIRA_PROJECT_ID` | Spira project ID (required) |
+| `--release-id` | `SPIRA_RELEASE_ID` | Spira release ID (required) |
+| `--test-set-id` | `SPIRA_TEST_SET_ID` | Spira test set ID (optional) |
+| `--results-file` | `SPIRA_RESULTS_DIR` | Path to test results file or directory |
+| `--results-dir` | `SPIRA_RESULTS_DIR` | Same as above (alias) |
+| `--result-type` | `SPIRA_RESULT_TYPE` | Override format detection |
+| `--automation-id-field` | `SPIRA_AUTOMATION_ID_FIELD` | Custom property for TC matching |
+| `--ssl-verify` | `SPIRA_SSL_VERIFY` | SSL verification (default: `true`) |
 
 ## Environment Variables
 
@@ -39,3 +66,20 @@ The tool resolves where to scan for test results in this order:
 - Never commit `.env` to version control (already in `.gitignore`)
 - API keys are masked in logs (only first 4 characters shown)
 - In CI/CD pipelines, use your platform's secrets manager for `SPIRA_USERNAME` and `SPIRA_API_KEY`
+
+## SSL Certificate Verification
+
+By default, the tool verifies SSL certificates. For corporate environments with internal or self-signed certificates, disable verification:
+
+```bash
+# Via CLI
+spira-report --ssl-verify false --url https://internal.spiraservice.net ...
+
+# Via env var
+SPIRA_SSL_VERIFY=false
+
+# Via .env file
+SPIRA_SSL_VERIFY=false
+```
+
+A warning is logged when SSL verification is disabled.
