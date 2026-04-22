@@ -26,6 +26,20 @@ from .logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
+
+def _inject_system_certs():
+    """
+    If truststore is installed, use the OS certificate store instead of certifi.
+    This makes Python trust the same CAs as the OS (including corporate internal CAs).
+    Install with: pip install truststore
+    """
+    try:
+        import truststore
+        truststore.inject_into_ssl()
+        logging.getLogger(__name__).debug("Using OS certificate store via truststore")
+    except ImportError:
+        pass  # truststore not installed, use default certifi bundle
+
 # CLI arg name -> env var name mapping
 _ARG_TO_ENV = {
     '--url': 'SPIRA_URL',
@@ -144,12 +158,29 @@ def _get_env(name, required=True):
 
 
 def _get_ssl_verify():
-    """Check if SSL verification should be enabled."""
-    val = os.environ.get('SPIRA_SSL_VERIFY', 'true').lower()
-    verify = val in ('true', '1', 'yes', '')
-    if not verify:
+    """
+    Determine SSL verification setting.
+    
+    Returns:
+        True (default, system CA), False (disabled), or str (path to CA bundle)
+    """
+    val = os.environ.get('SPIRA_SSL_VERIFY', 'true').strip()
+    
+    # Boolean values
+    if val.lower() in ('true', '1', 'yes', ''):
+        return True
+    if val.lower() in ('false', '0', 'no'):
         logger.warning("SSL verification disabled (SPIRA_SSL_VERIFY=false)")
-    return verify
+        return False
+    
+    # Treat as path to CA certificate bundle
+    if os.path.isfile(val):
+        logger.info(f"Using custom CA bundle: {val}")
+        return val
+    else:
+        logger.error(f"SPIRA_SSL_VERIFY points to non-existent file: {val}")
+        logger.error("Set to 'true' (system CAs), 'false' (disable), or a path to a CA bundle .pem file")
+        sys.exit(1)
 
 
 def run_preflight():
@@ -300,6 +331,7 @@ def run(results_path=None):
 def main():
     """CLI entry point."""
     setup_logging()
+    _inject_system_certs()
     _load_env_file()
 
     args = sys.argv[1:]
