@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class SpiraAPIClient:
     """Client for interacting with Spira REST API v7."""
     
-    def __init__(self, base_url: str, username: str, api_key: str):
+    def __init__(self, base_url: str, username: str, api_key: str, ssl_verify: bool = True):
         """
         Initialize Spira API Client.
         
@@ -29,6 +29,7 @@ class SpiraAPIClient:
             base_url: Spira instance URL (e.g., https://company.spiraservice.net)
             username: Spira username
             api_key: Spira API key (with curly braces)
+            ssl_verify: Whether to verify SSL certificates (default True)
         
         Raises:
             ValidationError: If base_url format is invalid
@@ -38,6 +39,7 @@ class SpiraAPIClient:
         self.api_key = api_key
         self._authenticated = False
         self._session = requests.Session()
+        self._session.verify = ssl_verify
         
     def _validate_and_normalize_url(self, url: str) -> str:
         """

@@ -17,6 +17,7 @@ All configuration is via environment variables. For local development, create a 
 | `SPIRA_AUTOMATION_ID_FIELD` | No | Custom property field for TC matching (e.g. `Custom_04`) |
 | `SPIRA_AUTO_CREATE_TEST_CASES` | No | Auto-create missing test cases (default: `true`) |
 | `SPIRA_AUTO_CREATE_TEST_SETS` | No | Auto-create missing test sets (default: `true`) |
+| `SPIRA_SSL_VERIFY` | No | SSL certificate verification (default: `true`). Set to `false` for corporate/internal certs |
 
 ## Results Path Resolution
 

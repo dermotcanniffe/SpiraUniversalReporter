@@ -1,12 +1,13 @@
 """
-spira-report — CLI entry point for Spira test result integration.
+spira-report -- CLI entry point for Spira test result integration.
 
 Usage:
-    spira-report [results_path]       # scan path or auto-sense from env/cwd
-    spira-report --preflight          # validate config and connectivity only
+    spira-report [results_path]                    # scan path or auto-sense
+    spira-report --preflight                       # validate config only
+    spira-report --url URL --username USER ...     # pass config as CLI args
     spira-report --help
 
-All Spira config comes from environment variables (or .env file for local dev).
+Config priority: CLI arguments > environment variables > .env file
 """
 
 import os
@@ -25,6 +26,21 @@ from .logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
+# CLI arg name -> env var name mapping
+_ARG_TO_ENV = {
+    '--url': 'SPIRA_URL',
+    '--username': 'SPIRA_USERNAME',
+    '--api-key': 'SPIRA_API_KEY',
+    '--project-id': 'SPIRA_PROJECT_ID',
+    '--release-id': 'SPIRA_RELEASE_ID',
+    '--test-set-id': 'SPIRA_TEST_SET_ID',
+    '--results-file': 'SPIRA_RESULTS_DIR',
+    '--results-dir': 'SPIRA_RESULTS_DIR',
+    '--result-type': 'SPIRA_RESULT_TYPE',
+    '--automation-id-field': 'SPIRA_AUTOMATION_ID_FIELD',
+    '--ssl-verify': 'SPIRA_SSL_VERIFY',
+}
+
 
 def _load_env_file():
     """Load .env file if present (local dev only, CI provides env vars)."""
@@ -39,23 +55,46 @@ def _load_env_file():
                         os.environ[k.strip()] = v.strip()
 
 
+def _parse_cli_args(args):
+    """
+    Parse CLI arguments and set them as env vars.
+    CLI args override env vars, which override .env file.
+    Returns the remaining positional args.
+    """
+    positional = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in _ARG_TO_ENV and i + 1 < len(args):
+            env_key = _ARG_TO_ENV[arg]
+            os.environ[env_key] = args[i + 1]
+            i += 2
+        elif arg.startswith('--') and '=' in arg:
+            key, value = arg.split('=', 1)
+            if key in _ARG_TO_ENV:
+                os.environ[_ARG_TO_ENV[key]] = value
+            i += 1
+        elif not arg.startswith('-'):
+            positional.append(arg)
+            i += 1
+        else:
+            positional.append(arg)
+            i += 1
+    return positional
+
+
 def _resolve_results_path(cli_arg=None):
     """Resolve the results path: CLI arg > SPIRA_RESULTS_DIR > cwd."""
     if cli_arg:
         return cli_arg
-
     env_path = os.environ.get('SPIRA_RESULTS_DIR') or os.environ.get('SPIRA_RESULTS_FILE')
     if env_path:
         return env_path
-
     return '.'
 
 
 def _discover_results(scan_path):
-    """
-    Auto-sense: scan a directory for parseable test results.
-    Uses each registered parser's can_parse() to find candidates.
-    """
+    """Auto-sense: scan a directory for parseable test results."""
     factory = ParserFactory()
     path = Path(scan_path)
 
@@ -63,7 +102,6 @@ def _discover_results(scan_path):
         logger.error(f"Results path does not exist: {scan_path}")
         return None, None
 
-    # If it's a file, try to detect directly
     if path.is_file():
         try:
             fmt = factory.detect_result_type(str(path))
@@ -71,14 +109,12 @@ def _discover_results(scan_path):
         except Exception:
             return None, None
 
-    # If it's a directory, check the directory itself first
     try:
         fmt = factory.detect_result_type(str(path))
         return str(path), fmt
     except Exception:
         pass
 
-    # Scan immediate children
     candidates = []
     for child in sorted(path.iterdir()):
         try:
@@ -93,7 +129,6 @@ def _discover_results(scan_path):
         logger.info(f"Found {len(candidates)} result sets:")
         for c, f in candidates:
             logger.info(f"  {f}: {c}")
-        # Return the first one — could be smarter later
         return candidates[0]
 
     return None, None
@@ -103,9 +138,18 @@ def _get_env(name, required=True):
     """Get env var, fail with clear message if required and missing."""
     val = os.environ.get(name, '')
     if required and not val:
-        logger.error(f"{name} is not set. Define it as an environment variable or in .env")
+        logger.error(f"{name} is not set. Provide via --{name.lower().replace('spira_', '').replace('_', '-')} or set {name} as an environment variable.")
         sys.exit(1)
     return val
+
+
+def _get_ssl_verify():
+    """Check if SSL verification should be enabled."""
+    val = os.environ.get('SPIRA_SSL_VERIFY', 'true').lower()
+    verify = val in ('true', '1', 'yes', '')
+    if not verify:
+        logger.warning("SSL verification disabled (SPIRA_SSL_VERIFY=false)")
+    return verify
 
 
 def run_preflight():
@@ -117,8 +161,9 @@ def run_preflight():
     project_id = int(_get_env('SPIRA_PROJECT_ID'))
     release_id = int(_get_env('SPIRA_RELEASE_ID'))
     test_set_id_str = _get_env('SPIRA_TEST_SET_ID', required=False)
+    ssl_verify = _get_ssl_verify()
 
-    client = SpiraAPIClient(url, username, api_key)
+    client = SpiraAPIClient(url, username, api_key, ssl_verify=ssl_verify)
 
     print(f"  Authenticating with {url}...")
     client.authenticate()
@@ -152,8 +197,8 @@ def run(results_path=None):
     auto_create_tc = _get_env('SPIRA_AUTO_CREATE_TEST_CASES', required=False) or 'true'
     auto_create_tc = auto_create_tc.lower() in ('true', '1', 'yes')
     automation_field = _get_env('SPIRA_AUTOMATION_ID_FIELD', required=False) or None
+    ssl_verify = _get_ssl_verify()
 
-    # Resolve and discover results
     scan_path = _resolve_results_path(results_path)
     logger.info(f"Scanning for results in: {scan_path}")
 
@@ -164,7 +209,6 @@ def run(results_path=None):
 
     logger.info(f"Found {result_type} results: {results_file}")
 
-    # Parse
     factory = ParserFactory()
     parser = factory.get_parser(result_type)
     test_results = parser.parse(results_file)
@@ -174,18 +218,15 @@ def run(results_path=None):
         logger.warning("No test results to process")
         return 0
 
-    # Connect to Spira
-    client = SpiraAPIClient(url, username, api_key)
+    client = SpiraAPIClient(url, username, api_key, ssl_verify=ssl_verify)
     client.authenticate()
     client.validate_release(project_id, release_id)
 
-    # Load test set mappings if test set is configured
     ts_mappings = {}
     if test_set_id:
         client.create_or_get_test_set(project_id, test_set_id, release_id=release_id)
         ts_mappings = client.get_test_set_tc_mappings(project_id, test_set_id)
 
-    # Process each result
     mapper = TestCaseMapper()
     summary = ExecutionSummary(total_tests=len(test_results))
     start = datetime.now()
@@ -193,7 +234,6 @@ def run(results_path=None):
     for result in test_results:
         tc_id = None
 
-        # TC matching
         if automation_field and result.raw_data:
             auto_id = mapper.extract_automation_id(result.raw_data)
             if auto_id:
@@ -206,7 +246,6 @@ def run(results_path=None):
                     )
                     logger.info(f"Created TC:{tc_id} for {auto_id}")
         else:
-            # Fallback: regex TC ID from name
             tc_id_num = mapper.extract_test_case_id(result.raw_data) if result.raw_data else None
             if not tc_id_num:
                 tc_id_num = mapper.get_test_case_id(result.name)
@@ -217,14 +256,13 @@ def run(results_path=None):
             summary.skipped_tests += 1
             continue
 
-        # Create test run
         try:
             tstc_id = ts_mappings.get(tc_id) if test_set_id else None
 
             if test_set_id and not tstc_id:
                 logger.warning(
-                    f"⚠ TC:{tc_id} is not in Test Set {test_set_id}. "
-                    f"Run created but not linked to test set. "
+                    f"TC:{tc_id} is not in Test Set {test_set_id}. "
+                    f"Run created but not linked. "
                     f"Add it: {url}/{project_id}/TestSet/{test_set_id}.aspx"
                 )
 
@@ -235,9 +273,8 @@ def run(results_path=None):
             )
             summary.successful_uploads += 1
             status = "✓" if result.status.name == "PASSED" else "✗"
-            logger.info(f"{status} TC:{tc_id} → Run #{run_id} [{result.status.name}]")
+            logger.info(f"{status} TC:{tc_id} -> Run #{run_id} [{result.status.name}]")
 
-            # Upload evidence
             for evidence_path in result.evidence_files:
                 try:
                     client.upload_evidence(project_id, run_id, evidence_path)
@@ -251,7 +288,6 @@ def run(results_path=None):
 
     summary.execution_duration = (datetime.now() - start).total_seconds()
 
-    # Summary
     print(f"\n{'='*60}")
     print(f"Total: {summary.total_tests}  Sent: {summary.successful_uploads}  "
           f"Failed: {summary.failed_uploads}  Skipped: {summary.skipped_tests}  "
@@ -270,29 +306,41 @@ def main():
 
     if '--help' in args or '-h' in args:
         print(__doc__)
+        print("CLI arguments (override env vars):")
+        print("  --url URL                  Spira instance URL")
+        print("  --username USER            Spira username")
+        print("  --api-key KEY              Spira API key")
+        print("  --project-id ID            Spira project ID")
+        print("  --release-id ID            Spira release ID")
+        print("  --test-set-id ID           Spira test set ID (optional)")
+        print("  --results-file PATH        Path to test results file or directory")
+        print("  --results-dir PATH         Path to test results directory")
+        print("  --result-type TYPE         Override format detection")
+        print("  --automation-id-field FIELD Custom property for TC matching")
+        print("  --ssl-verify true|false    SSL certificate verification (default: true)")
+        print()
         print("Environment variables:")
-        print("  SPIRA_URL                  Spira instance URL (required)")
-        print("  SPIRA_USERNAME             Spira username (required)")
-        print("  SPIRA_API_KEY              Spira API key (required)")
-        print("  SPIRA_PROJECT_ID           Spira project ID (required)")
-        print("  SPIRA_TEST_SET_ID          Spira test set ID (required)")
-        print("  SPIRA_RELEASE_ID           Spira release ID (required)")
-        print("  SPIRA_RESULTS_DIR          Path to scan for test results")
-        print("  SPIRA_RESULT_TYPE          Override format detection")
-        print("  SPIRA_AUTOMATION_ID_FIELD  Custom property for TC matching")
-        print("  SPIRA_AUTO_CREATE_TEST_CASES  Auto-create TCs (default: true)")
+        print("  SPIRA_URL, SPIRA_USERNAME, SPIRA_API_KEY, SPIRA_PROJECT_ID,")
+        print("  SPIRA_RELEASE_ID, SPIRA_TEST_SET_ID, SPIRA_RESULTS_DIR,")
+        print("  SPIRA_RESULT_TYPE, SPIRA_AUTOMATION_ID_FIELD, SPIRA_SSL_VERIFY,")
+        print("  SPIRA_AUTO_CREATE_TEST_CASES")
+        print()
+        print("Config priority: CLI args > env vars > .env file")
         return 0
 
-    if '--preflight' in args:
+    # Parse CLI args into env vars (CLI overrides env)
+    remaining = _parse_cli_args(args)
+
+    if '--preflight' in remaining:
         try:
             return run_preflight()
         except Exception as e:
             logger.error(f"Pre-flight failed: {e}")
             return 1
 
-    # Main run — optional positional arg for results path
+    # Positional arg for results path
     results_path = None
-    for arg in args:
+    for arg in remaining:
         if not arg.startswith('-'):
             results_path = arg
             break
