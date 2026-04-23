@@ -17,36 +17,74 @@ class JUnitParser(TestResultParser):
     format_name = 'junit-xml'
 
     def can_parse(self, file_path: str) -> bool:
-        """Detect JUnit XML by extension and root element."""
+        """Detect JUnit XML — a single file or a directory containing XML files."""
         path = Path(file_path)
-        if not path.is_file() or path.suffix != '.xml':
-            return False
+
+        if path.is_file() and path.suffix == '.xml':
+            return self._is_junit_xml(path)
+
+        if path.is_dir():
+            return any(self._is_junit_xml(f) for f in path.glob('*.xml'))
+
+        return False
+
+    def _is_junit_xml(self, path: Path) -> bool:
+        """Check if an XML file is JUnit format."""
         try:
-            tree = ET.parse(file_path)
+            tree = ET.parse(str(path))
             return tree.getroot().tag in ('testsuite', 'testsuites')
         except Exception:
             return False
 
     def parse(self, file_path: str) -> List[TestResult]:
         """
-        Parse JUnit XML test results.
+        Parse JUnit XML test results from a file or directory.
 
         Args:
-            file_path: Path to JUnit XML file
+            file_path: Path to a JUnit XML file, or a directory containing XML files
 
         Returns:
             List of TestResult objects
-
-        Raises:
-            ParseError: If file cannot be parsed
         """
+        path = Path(file_path)
+
+        if path.is_dir():
+            return self._parse_directory(path)
+        elif path.is_file():
+            return self._parse_file(path)
+        else:
+            raise ParseError(f"Path does not exist: {file_path}")
+
+    def _parse_directory(self, directory: Path) -> List[TestResult]:
+        """Parse all JUnit XML files in a directory."""
+        import logging
+        xml_files = sorted([
+            f for f in directory.glob('*.xml')
+            if self._is_junit_xml(f)
+        ])
+
+        if not xml_files:
+            raise ParseError(f"No JUnit XML files found in: {directory}")
+
+        all_results = []
+        for xml_file in xml_files:
+            try:
+                results = self._parse_file(xml_file)
+                all_results.extend(results)
+            except ParseError as e:
+                logging.getLogger(__name__).warning(f"Skipping {xml_file.name}: {e}")
+
+        return all_results
+
+    def _parse_file(self, file_path: Path) -> List[TestResult]:
+        """Parse a single JUnit XML file."""
         try:
-            tree = ET.parse(file_path)
+            tree = ET.parse(str(file_path))
             root = tree.getroot()
         except ET.ParseError as e:
-            raise ParseError(f"Invalid XML format: {e}")
+            raise ParseError(f"Invalid XML format in {file_path.name}: {e}")
         except Exception as e:
-            raise ParseError(f"Failed to read file: {e}")
+            raise ParseError(f"Failed to read {file_path.name}: {e}")
 
         # Handle both <testsuites> and <testsuite> root elements
         if root.tag == 'testsuites':
@@ -59,7 +97,7 @@ class JUnitParser(TestResultParser):
                 f"'testsuites', got '{root.tag}'"
             )
 
-        results_dir = Path(file_path).parent
+        results_dir = file_path.parent
         test_results = []
 
         for testsuite in testsuites:

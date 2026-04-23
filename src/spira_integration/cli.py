@@ -284,6 +284,11 @@ def run(results_path=None):
 
         if not tc_id:
             logger.warning(f"No TC match for: {result.name}")
+            if not automation_field:
+                logger.warning(
+                    "  Hint: Set SPIRA_AUTOMATION_ID_FIELD to auto-create test cases. "
+                    "See docs/tc-matching.md"
+                )
             summary.skipped_tests += 1
             continue
 
