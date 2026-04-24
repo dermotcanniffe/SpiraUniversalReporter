@@ -18,6 +18,9 @@ dev = [
     "pytest>=7.4.0",
     "behave>=1.2.6",
 ]
+ssl = [
+    "truststore>=0.8.0",
+]
 
 [project.scripts]
 spira-report = "spira_integration.cli:main"

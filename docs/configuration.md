@@ -69,17 +69,34 @@ The tool resolves where to scan for test results in this order:
 
 ## SSL Certificate Verification
 
-By default, the tool verifies SSL certificates. For corporate environments with internal or self-signed certificates, disable verification:
+The tool verifies SSL certificates by default using Python's built-in CA bundle. For corporate environments with internal certificate authorities, there are three options (in order of preference):
+
+### Option 1: Use OS certificate store (recommended)
+
+Install `truststore` to make Python trust the same certificates as your OS. If your corporate CA is trusted by Windows/macOS/Linux, Python will trust it too — no config needed.
 
 ```bash
-# Via CLI
-spira-report --ssl-verify false --url https://internal.spiraservice.net ...
+pip install truststore
+```
 
-# Via env var
-SPIRA_SSL_VERIFY=false
+The tool detects `truststore` automatically at startup. Nothing else to configure.
 
-# Via .env file
+### Option 2: Point to a custom CA bundle
+
+Set `SPIRA_SSL_VERIFY` to the path of your corporate CA certificate file (.pem):
+
+```bash
+SPIRA_SSL_VERIFY=/path/to/corporate-ca-bundle.pem
+# or
+spira-report --ssl-verify /path/to/corporate-ca-bundle.pem
+```
+
+### Option 3: Disable verification (not recommended)
+
+As a last resort, disable SSL verification entirely:
+
+```bash
 SPIRA_SSL_VERIFY=false
 ```
 
-A warning is logged when SSL verification is disabled.
+A warning is logged when verification is disabled.
