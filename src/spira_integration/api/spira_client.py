@@ -471,11 +471,8 @@ class SpiraAPIClient:
         payload = {
             "Name": test_case_name,
             "Description": description or f"Auto-created from test automation: {test_case_name}",
-            "TestCaseTypeId": 1,  # Manual test case type
-            "TestCaseStatusId": 3,  # Approved status
-            "TestCasePriorityId": 3,  # Medium priority
-            "OwnerId": None,  # Will use default
-            "AuthorId": None,  # Will use default
+            "OwnerId": None,
+            "AuthorId": None,
             "ExecutionStatusId": 1  # Not Run
         }
         
@@ -614,9 +611,6 @@ class SpiraAPIClient:
         payload = {
             "Name": test_case_name,
             "Description": description or f"Auto-created from test automation: {test_case_name}",
-            "TestCaseTypeId": 1,
-            "TestCaseStatusId": 3,
-            "TestCasePriorityId": 3,
             "CustomProperties": [
                 {
                     "PropertyNumber": int(custom_field.replace("Custom_", "")),
