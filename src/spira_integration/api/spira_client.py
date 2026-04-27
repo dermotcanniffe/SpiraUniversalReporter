@@ -445,7 +445,9 @@ class SpiraAPIClient:
         self,
         project_id: int,
         test_case_name: str,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        tc_type_id: Optional[int] = None,
+        tc_priority_id: Optional[int] = None
     ) -> int:
         """
         Create a new test case in Spira.
@@ -454,12 +456,8 @@ class SpiraAPIClient:
             project_id: Spira project ID
             test_case_name: Name of the test case
             description: Optional description
-            
-        Returns:
-            Test case ID
-            
-        Raises:
-            APIError: If API request fails
+            tc_type_id: Optional test case type ID (uses product default if omitted)
+            tc_priority_id: Optional test case priority ID (uses product default if omitted)
         """
         if not self._authenticated:
             self.authenticate()
@@ -467,14 +465,14 @@ class SpiraAPIClient:
         endpoint = f'projects/{project_id}/test-cases'
         url = self._build_url(endpoint)
         
-        # Build request payload
         payload = {
             "Name": test_case_name,
             "Description": description or f"Auto-created from test automation: {test_case_name}",
-            "OwnerId": None,
-            "AuthorId": None,
-            "ExecutionStatusId": 1  # Not Run
         }
+        if tc_type_id:
+            payload["TestCaseTypeId"] = tc_type_id
+        if tc_priority_id:
+            payload["TestCasePriorityId"] = tc_priority_id
         
         headers = {
             'Accept': 'application/json',
@@ -584,7 +582,9 @@ class SpiraAPIClient:
         test_case_name: str,
         custom_field: str,
         custom_value: str,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        tc_type_id: Optional[int] = None,
+        tc_priority_id: Optional[int] = None
     ) -> int:
         """
         Create a test case and set a custom property value.
@@ -595,12 +595,8 @@ class SpiraAPIClient:
             custom_field: Custom property field name (e.g. 'Custom_04')
             custom_value: Value to set on the custom property
             description: Optional description
-            
-        Returns:
-            Test case ID
-            
-        Raises:
-            APIError: If API request fails
+            tc_type_id: Optional test case type ID
+            tc_priority_id: Optional test case priority ID
         """
         if not self._authenticated:
             self.authenticate()
@@ -618,6 +614,10 @@ class SpiraAPIClient:
                 }
             ]
         }
+        if tc_type_id:
+            payload["TestCaseTypeId"] = tc_type_id
+        if tc_priority_id:
+            payload["TestCasePriorityId"] = tc_priority_id
 
         headers = {
             'Accept': 'application/json',

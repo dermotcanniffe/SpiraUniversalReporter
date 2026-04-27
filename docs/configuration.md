@@ -27,6 +27,8 @@ spira-report --url https://company.spiraservice.net \
 | `--results-dir` | `SPIRA_RESULTS_DIR` | Same as above (alias) |
 | `--result-type` | `SPIRA_RESULT_TYPE` | Override format detection |
 | `--automation-id-field` | `SPIRA_AUTOMATION_ID_FIELD` | Custom property for TC matching |
+| `--tc-type-id` | `SPIRA_TC_TYPE_ID` | Test case type ID (uses product default if omitted) |
+| `--tc-priority-id` | `SPIRA_TC_PRIORITY_ID` | Test case priority ID (uses product default if omitted) |
 | `--ssl-verify` | `SPIRA_SSL_VERIFY` | SSL verification (default: `true`) |
 
 ## Environment Variables
@@ -44,6 +46,8 @@ spira-report --url https://company.spiraservice.net \
 | `SPIRA_AUTOMATION_ID_FIELD` | No | Custom property field for TC matching (e.g. `Custom_04`) |
 | `SPIRA_AUTO_CREATE_TEST_CASES` | No | Auto-create missing test cases (default: `true`) |
 | `SPIRA_AUTO_CREATE_TEST_SETS` | No | Auto-create missing test sets (default: `true`) |
+| `SPIRA_TC_TYPE_ID` | No | Test case type ID for auto-created TCs (uses product default if omitted) |
+| `SPIRA_TC_PRIORITY_ID` | No | Test case priority ID for auto-created TCs (uses product default if omitted) |
 | `SPIRA_SSL_VERIFY` | No | SSL certificate verification (default: `true`). Set to `false` for corporate/internal certs |
 
 ## Results Path Resolution

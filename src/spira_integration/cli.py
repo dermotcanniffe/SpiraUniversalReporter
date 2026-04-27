@@ -52,6 +52,8 @@ _ARG_TO_ENV = {
     '--results-dir': 'SPIRA_RESULTS_DIR',
     '--result-type': 'SPIRA_RESULT_TYPE',
     '--automation-id-field': 'SPIRA_AUTOMATION_ID_FIELD',
+    '--tc-type-id': 'SPIRA_TC_TYPE_ID',
+    '--tc-priority-id': 'SPIRA_TC_PRIORITY_ID',
     '--ssl-verify': 'SPIRA_SSL_VERIFY',
 }
 
@@ -228,6 +230,10 @@ def run(results_path=None):
     auto_create_tc = _get_env('SPIRA_AUTO_CREATE_TEST_CASES', required=False) or 'true'
     auto_create_tc = auto_create_tc.lower() in ('true', '1', 'yes')
     automation_field = _get_env('SPIRA_AUTOMATION_ID_FIELD', required=False) or None
+    tc_type_id_str = _get_env('SPIRA_TC_TYPE_ID', required=False)
+    tc_priority_id_str = _get_env('SPIRA_TC_PRIORITY_ID', required=False)
+    tc_type_id = int(tc_type_id_str) if tc_type_id_str else None
+    tc_priority_id = int(tc_priority_id_str) if tc_priority_id_str else None
     ssl_verify = _get_ssl_verify()
 
     scan_path = _resolve_results_path(results_path)
@@ -273,7 +279,8 @@ def run(results_path=None):
                 )
                 if not tc_id and auto_create_tc:
                     tc_id = client.create_test_case_with_custom_property(
-                        project_id, result.name, automation_field, auto_id
+                        project_id, result.name, automation_field, auto_id,
+                        tc_type_id=tc_type_id, tc_priority_id=tc_priority_id
                     )
                     logger.info(f"Created TC:{tc_id} for {auto_id}")
         else:
