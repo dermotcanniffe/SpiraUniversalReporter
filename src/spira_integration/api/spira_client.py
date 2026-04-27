@@ -468,12 +468,13 @@ class SpiraAPIClient:
         payload = {
             "Name": test_case_name,
             "Description": description or f"Auto-created from test automation: {test_case_name}",
+            "TestCaseStatusId": 1,  # Draft — safe default across all templates
         }
         if tc_type_id:
             payload["TestCaseTypeId"] = tc_type_id
         if tc_priority_id:
             payload["TestCasePriorityId"] = tc_priority_id
-        
+
         headers = {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
@@ -607,6 +608,7 @@ class SpiraAPIClient:
         payload = {
             "Name": test_case_name,
             "Description": description or f"Auto-created from test automation: {test_case_name}",
+            "TestCaseStatusId": 1,  # Draft
             "CustomProperties": [
                 {
                     "PropertyNumber": int(custom_field.replace("Custom_", "")),
