@@ -1,2 +1,6 @@
 {
+  "files.autoSave": "off",
+  "files.associations": {
+    "docs/slides/*.html": "html"
+  }
 }
