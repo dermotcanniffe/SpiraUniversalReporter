@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spira Universal Reporter — Overview</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { color: #1d3557; }
+    .reveal .accent { color: #e76f51; font-weight: bold; }
+    .reveal .subtle { color: #6c757d; font-size: 0.7em; }
+    .reveal table { font-size: 0.65em; margin: 0 auto; }
+    .reveal table th { background: #1d3557; color: white; padding: 8px 16px; }
+    .reveal table td { padding: 6px 16px; border-bottom: 1px solid #dee2e6; }
+    .reveal .problem-box { background: #fff3cd; border-left: 4px solid #e76f51; padding: 20px; text-align: left; margin: 20px 0; }
+    .reveal .solution-box { background: #d4edda; border-left: 4px solid #2d6a4f; padding: 20px; text-align: left; margin: 20px 0; }
+    .reveal code { font-size: 0.75em; }
+    .reveal pre code { max-height: 450px; }
+    .reveal .small { font-size: 0.6em; }
+    .reveal section img { border: none; box-shadow: none; }
+    .mermaid { font-size: 0.7em; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- Title -->
+<section>
+  <h1>Spira Universal Reporter</h1>
+  <h3>Automated Test Results to Spira</h3>
+  <p class="subtle">From any CI/CD pipeline, any test framework, zero test code changes</p>
+</section>
+
+<!-- The Problem -->
+<section>
+  <h2>The Problem</h2>
+  <div class="problem-box">
+    <p><strong>Customers run automated tests in CI/CD pipelines.</strong></p>
+    <p>Test results live in pipeline logs, Allure reports, JUnit XML files, or ExtentReports HTML.</p>
+    <p><strong>None of this data reaches Spira.</strong></p>
+    <p>Manual entry is not an option at scale. Customers need automated test execution history, evidence, and traceability in Spira — without modifying their test frameworks.</p>
+  </div>
+</section>
+
+<!-- What We Built -->
+<section>
+  <h2>What We Built</h2>
+  <div class="solution-box">
+    <p>A <span class="accent">single CLI command</span> that:</p>
+    <ul>
+      <li>Parses test results from any supported format</li>
+      <li>Matches tests to Spira test cases automatically</li>
+      <li>Creates test runs with full execution details</li>
+      <li>Uploads evidence (screenshots, videos, logs)</li>
+    </ul>
+  </div>
+  <pre><code data-trim>
+pip install spira-test-reporter
+spira-report ./test-results/
+  </code></pre>
+</section>
+
+<!-- How It Works - Diagram -->
+<section>
+  <h2>How It Works</h2>
+  <div class="mermaid">
+flowchart TD
+    A[CI/CD Pipeline<br/>Runs Tests] --> B[Test Results<br/>Generated]
+    B --> C{Auto-Detect<br/>Format}
+    C -->|.xml| D[JUnit XML]
+    C -->|.json| E[Allure JSON]
+    C -->|directory| F[ExtentReports]
+    D --> G[Parse & Extract]
+    E --> G
+    F --> G
+    G --> H[Match to Spira<br/>Test Cases]
+    H --> I[Create Test Runs]
+    I --> J[Upload Evidence]
+    style A fill:#2d6a4f,color:#fff
+    style I fill:#1d3557,color:#fff
+    style H fill:#264653,color:#fff
+  </div>
+</section>
+
+<!-- Supported Formats -->
+<section>
+  <h2>Supported Formats</h2>
+  <table>
+    <thead>
+      <tr><th>Format</th><th>Frameworks</th><th>Evidence</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Allure JSON</td><td>Cypress, Playwright, pytest</td><td>Screenshots, videos from nested steps</td></tr>
+      <tr><td>JUnit XML</td><td>TestNG, Maven Surefire, Gradle</td><td>EVIDENCE: patterns in system-out</td></tr>
+      <tr><td>ExtentReports HTML</td><td>Selenium, Java frameworks</td><td>Screenshots, consolidated docs</td></tr>
+      <tr><td><em>Custom</em></td><td><em>Any — pluggable parser architecture</em></td><td><em>Parser-defined</em></td></tr>
+    </tbody>
+  </table>
+  <p class="subtle">New formats added by dropping in a Python file — no core code changes</p>
+</section>
+
+<!-- Test Case Matching -->
+<section>
+  <h2>Stateless Test Case Matching</h2>
+  <p>No mapping files. No test code changes. <span class="accent">Spira is the source of truth.</span></p>
+  <table>
+    <thead>
+      <tr><th>Step</th><th>What Happens</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Extract stable ID from test result (Allure hash, JUnit classname, test name)</td></tr>
+      <tr><td>2</td><td>Search Spira for TC with matching custom property</td></tr>
+      <tr><td>3a</td><td>Found → reuse that TC for the test run</td></tr>
+      <tr><td>3b</td><td>Not found → auto-create TC, store the ID in custom property</td></tr>
+      <tr><td>4</td><td>Next run finds the same TC automatically</td></tr>
+    </tbody>
+  </table>
+  <p class="subtle">Fully stateless — tool is cloned fresh each pipeline run</p>
+</section>
+
+<!-- Zero Friction -->
+<section>
+  <h2>Zero Friction for the Customer</h2>
+  <p>The customer changes <span class="accent">nothing</span> in their test code.</p>
+  <p>They add <strong>two lines</strong> to their CI/CD pipeline:</p>
+  <pre><code data-trim data-noescape class="yaml">
+send_to_spira:
+  stage: report
+  when: always
+  script:
+    - pip install spira-test-reporter
+    - spira-report
+  </code></pre>
+  <p>Spira credentials come from CI/CD environment variables.<br/>
+  Shared config at the group level — each project only needs 3 vars.</p>
+</section>
+
+<!-- What Lands in Spira -->
+<section>
+  <h2>What Lands in Spira</h2>
+  <ul>
+    <li><strong>Test Cases</strong> — auto-created with automation ID in custom property</li>
+    <li><strong>Test Runs</strong> — pass/fail status, timestamps, duration, error messages, stack traces</li>
+    <li><strong>Evidence</strong> — screenshots, videos, logs attached to test runs</li>
+    <li><strong>Execution History</strong> — builds up over time, same TC reused across runs</li>
+    <li><strong>Release Association</strong> — test runs linked to the configured release</li>
+  </ul>
+</section>
+
+<!-- Customer Story -->
+<section>
+  <h2>In Production</h2>
+  <div class="solution-box">
+    <p><strong>Customer:</strong> Large financial services organisation</p>
+    <p><strong>Frameworks:</strong> Selenium/TestNG (ExtentReports) + Cypress (Allure)</p>
+    <p><strong>Pipeline:</strong> GitLab CI/CD</p>
+    <p><strong>Result:</strong> Automated test results flowing to Spira from both frameworks, with screenshots and evidence, zero changes to their test code.</p>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section>
+  <h2>Architecture</h2>
+  <ul>
+    <li>Python 3.9+ — pip-installable package</li>
+    <li>Pluggable parser registry — new formats via subclass + register</li>
+    <li>Spira REST API v7 — auth, TC search/create, test runs, evidence upload</li>
+    <li>Exponential backoff on rate limiting</li>
+    <li>OS certificate store support for corporate SSL</li>
+    <li>97 BDD scenarios, 418 steps — offline + live integration tests</li>
+  </ul>
+  <p class="subtle">Open source, git-maintained, fully documented</p>
+</section>
+
+<!-- What's Next -->
+<section>
+  <h2>What's Next</h2>
+  <ul>
+    <li>Additional parser formats (NUnit, Robot Framework, pytest native)</li>
+    <li>Shared config file to reduce per-project setup</li>
+    <li>Test set auto-population (pending Spira REST API endpoint)</li>
+    <li>PyPI publication for easier distribution</li>
+    <li>Spira-triggered pipeline execution (closed loop)</li>
+  </ul>
+</section>
+
+<!-- Close -->
+<section>
+  <h1>Spira Universal Reporter</h1>
+  <p><span class="accent">Any framework. Any pipeline. Zero code changes.</span></p>
+  <p class="subtle">
+    <a href="https://github.com/dermotcanniffe/SpiraUniversalReporter">github.com/dermotcanniffe/SpiraUniversalReporter</a>
+  </p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+
+  Reveal.initialize({
+    hash: true,
+    plugins: [ RevealHighlight ],
+    width: 1280,
+    height: 720,
+  }).then(() => {
+    // Render mermaid after Reveal is ready
+    document.querySelectorAll('.mermaid').forEach((el, i) => {
+      mermaid.render('mermaid-' + i, el.textContent).then(({svg}) => {
+        el.innerHTML = svg;
+      });
+    });
+  });
+</script>
+</body>
+</html>
