@@ -36,7 +36,6 @@
         .slide-logo { height: 50px; width: auto; margin: 0 0 10px 0 !important; background: none !important; border: none !important; box-shadow: none !important; }
         .center-logo { height: 80px; width: auto; margin: 0 !important; background: none !important; border: none !important; box-shadow: none !important; }
         .hero-logo { height: 120px; width: auto; margin: 0 !important; background: none !important; border: none !important; box-shadow: none !important; }
-        .mermaid svg { max-width: 85%; margin: 0 auto; }
     </style>
 </head>
 <body>
@@ -109,25 +108,39 @@
 <!-- How It Works -->
 <section>
     <h2>How It Works</h2>
-    <div class="mermaid">
-flowchart TD
-    A[CI/CD Pipeline] --> B[Test Results]
-    B --> C{Auto-Detect}
-    C -->|.xml| D[JUnit XML]
-    C -->|.json| E[Allure JSON]
-    C -->|dir| F[ExtentReports]
-    D --> G[Parse + Extract]
-    E --> G
-    F --> G
-    G --> H[Match TCs]
-    H --> I[Create Runs]
-    I --> J[Upload Evidence]
-    style A fill:#2d6a4f,color:#fff
-    style I fill:#f58220,color:#fff
-    style H fill:#1e293b,color:#f8fafc,stroke:#f58220
+    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: nowrap; margin-top: 30px;">
+        <div class="tile fragment" style="padding: 12px 14px; text-align: center; min-width: 110px; border-top-color: #2d6a4f;">
+            <p style="font-size: 0.65em; color: #f8fafc; margin: 0;"><strong>CI/CD Pipeline</strong></p>
+            <p style="font-size: 0.55em; margin: 4px 0 0 0;">Runs Tests</p>
+        </div>
+        <span class="fragment" style="color: #f58220; font-size: 1.4em;">&rarr;</span>
+        <div class="tile fragment" style="padding: 12px 14px; text-align: center; min-width: 110px;">
+            <p style="font-size: 0.65em; color: #f8fafc; margin: 0;"><strong>Auto-Detect</strong></p>
+            <p style="font-size: 0.55em; margin: 4px 0 0 0;">JUnit / Allure / Extent</p>
+        </div>
+        <span class="fragment" style="color: #f58220; font-size: 1.4em;">&rarr;</span>
+        <div class="tile fragment" style="padding: 12px 14px; text-align: center; min-width: 110px;">
+            <p style="font-size: 0.65em; color: #f8fafc; margin: 0;"><strong>Parse</strong></p>
+            <p style="font-size: 0.55em; margin: 4px 0 0 0;">Results + Evidence</p>
+        </div>
+        <span class="fragment" style="color: #f58220; font-size: 1.4em;">&rarr;</span>
+        <div class="tile fragment" style="padding: 12px 14px; text-align: center; min-width: 110px; border-top-color: #f58220;">
+            <p style="font-size: 0.65em; color: #f8fafc; margin: 0;"><strong>Match TCs</strong></p>
+            <p style="font-size: 0.55em; margin: 4px 0 0 0;">Custom Property</p>
+        </div>
+        <span class="fragment" style="color: #f58220; font-size: 1.4em;">&rarr;</span>
+        <div class="tile fragment" style="padding: 12px 14px; text-align: center; min-width: 110px; border-top-color: #2d6a4f;">
+            <p style="font-size: 0.65em; color: #f8fafc; margin: 0;"><strong>Create Runs</strong></p>
+            <p style="font-size: 0.55em; margin: 4px 0 0 0;">In Spira</p>
+        </div>
+        <span class="fragment" style="color: #f58220; font-size: 1.4em;">&rarr;</span>
+        <div class="tile fragment" style="padding: 12px 14px; text-align: center; min-width: 110px;">
+            <p style="font-size: 0.65em; color: #f8fafc; margin: 0;"><strong>Evidence</strong></p>
+            <p style="font-size: 0.55em; margin: 4px 0 0 0;">Screenshots, Videos</p>
+        </div>
     </div>
     <aside class="notes">
-        Format auto-detection uses each parser's can_parse method. Pluggable architecture means new formats are added by dropping in a Python file.
+        Walk through each step. Format auto-detection uses each parser's can_parse method. TC matching searches Spira by custom property — fully stateless. Evidence is uploaded as attachments to the test run.
     </aside>
 </section>
 
@@ -260,19 +273,13 @@ flowchart TD
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/reveal.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/plugin/notes/notes.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
     <script>
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
         Reveal.initialize({
             width: 1280, height: 720, margin: 0.12,
             minScale: 0.2, maxScale: 2.0,
             hash: true, controls: true, progress: true, center: true,
             transition: 'fade',
             plugins: [RevealNotes]
-        }).then(() => {
-            document.querySelectorAll('.mermaid').forEach((el, i) => {
-                mermaid.render('mermaid-' + i, el.textContent).then(({svg}) => { el.innerHTML = svg; });
-            });
         });
     </script>
 </body>
