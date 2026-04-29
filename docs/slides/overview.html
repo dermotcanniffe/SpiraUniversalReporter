@@ -49,3 +49,231 @@
     </div>
     <div class="reveal">
         <div class="slides">
+
+<!-- Hero -->
+<section class="center" style="text-align: center;" data-background-gradient="linear-gradient(to bottom, #fdb913 0%, #fdb913 30%, #f58220 55%, #1b2a4a 80%, #0f172a 100%)">
+    <div style="transform: translateY(-60px);">
+        <img src="https://www.inflectra.com/Images/Media-Kit/inflectra-logo-transparent.png" alt="Inflectra" class="hero-logo" style="margin-bottom: 80px !important;">
+        <h3 style="font-size: 1.6em; font-weight: 500; color: #f8fafc; margin-bottom: 10px; text-shadow: 0 1px 4px rgba(0,0,0,0.3);">Spira Universal Reporter</h3>
+        <p style="font-size: 1.2em; color: #fdb913; text-shadow: 0 1px 4px rgba(0,0,0,0.3);">Any Framework. Any Pipeline. Zero Code Changes.</p>
+    </div>
+</section>
+
+<!-- Title -->
+<section class="center" style="text-align: center;">
+    <h1>Automated Test Results <span class="text-orange">to Spira</span></h1>
+    <p style="font-size: 1.1em; color: #cbd5e1;">From CI/CD pipelines, without modifying test frameworks</p>
+    <p style="font-size: 0.8em; color: #475569; margin-top: 20px;">Dermot Canniffe &mdash; Solutions Engineering</p>
+</section>
+
+<!-- The Problem -->
+<section>
+    <h2>The Problem</h2>
+    <div class="grid-2" style="grid-template-columns: 1fr 1fr;">
+        <div class="fragment">
+            <h3 class="text-orange" style="font-size: 1.2em;">Automated Tests Run</h3>
+            <p style="font-size: 0.8em; line-height: 1.4;">Results live in pipeline logs, Allure reports, JUnit XML, ExtentReports HTML.</p>
+        </div>
+        <div class="fragment">
+            <h3 class="text-orange" style="font-size: 1.2em;">Spira Stays Empty</h3>
+            <p style="font-size: 0.8em; line-height: 1.4;">No execution history. No evidence. No traceability. Manual entry doesn't scale.</p>
+        </div>
+    </div>
+    <aside class="notes">
+        Customers run hundreds of automated tests per pipeline. Results are scattered across CI/CD tools. None of it reaches Spira for test management, compliance, or reporting.
+    </aside>
+</section>
+
+<!-- What We Built -->
+<section>
+    <h2>What We Built</h2>
+    <div class="grid-2">
+        <div>
+            <ul style="margin-top: 10px;">
+                <li class="fragment"><strong>Auto-detect</strong> test result format</li>
+                <li class="fragment"><strong>Parse</strong> results with evidence</li>
+                <li class="fragment"><strong>Match</strong> to Spira test cases</li>
+                <li class="fragment"><strong>Create</strong> test runs + upload evidence</li>
+            </ul>
+        </div>
+        <div class="tile fragment">
+            <h3>Two Lines of YAML</h3>
+            <p style="font-family: monospace; font-size: 0.7em; color: #f58220;">pip install spira-test-reporter<br>spira-report</p>
+        </div>
+    </div>
+    <aside class="notes">
+        A single CLI command that plugs into any CI/CD pipeline as a post-test stage. The customer changes nothing in their test code.
+    </aside>
+</section>
+
+<!-- How It Works -->
+<section>
+    <h2>How It Works</h2>
+    <div class="mermaid">
+flowchart TD
+    A[CI/CD Pipeline] --> B[Test Results]
+    B --> C{Auto-Detect}
+    C -->|.xml| D[JUnit XML]
+    C -->|.json| E[Allure JSON]
+    C -->|dir| F[ExtentReports]
+    D --> G[Parse + Extract]
+    E --> G
+    F --> G
+    G --> H[Match TCs]
+    H --> I[Create Runs]
+    I --> J[Upload Evidence]
+    style A fill:#2d6a4f,color:#fff
+    style I fill:#f58220,color:#fff
+    style H fill:#1e293b,color:#f8fafc,stroke:#f58220
+    </div>
+    <aside class="notes">
+        Format auto-detection uses each parser's can_parse method. Pluggable architecture means new formats are added by dropping in a Python file.
+    </aside>
+</section>
+
+<!-- Supported Formats -->
+<section>
+    <h2>Supported Formats</h2>
+    <div class="grid-2" style="grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+        <div class="tile fragment">
+            <h3>Allure JSON</h3>
+            <p>Cypress, Playwright, pytest</p>
+            <p style="margin-top:8px; color: #f58220;">Screenshots, videos</p>
+        </div>
+        <div class="tile fragment">
+            <h3>JUnit XML</h3>
+            <p>TestNG, Maven, Gradle</p>
+            <p style="margin-top:8px; color: #f58220;">EVIDENCE: patterns</p>
+        </div>
+        <div class="tile fragment">
+            <h3>ExtentReports</h3>
+            <p>Selenium, Java frameworks</p>
+            <p style="margin-top:8px; color: #f58220;">Screenshots, docs</p>
+        </div>
+    </div>
+    <p class="fragment" style="text-align: center; font-size: 0.7em; color: #475569; margin-top: 20px;">+ Pluggable parser architecture &mdash; add any format without core code changes</p>
+</section>
+
+<!-- TC Matching -->
+<section>
+    <h2>Stateless TC Matching</h2>
+    <div class="grid-2">
+        <div>
+            <ul style="margin-top: 10px;">
+                <li class="fragment">Extract <strong>stable ID</strong> from test result</li>
+                <li class="fragment">Search Spira by <strong>custom property</strong></li>
+                <li class="fragment">Found &rarr; <strong>reuse</strong> existing TC</li>
+                <li class="fragment">Not found &rarr; <strong>auto-create</strong> TC</li>
+            </ul>
+        </div>
+        <div class="tile fragment">
+            <h3>Spira = Source of Truth</h3>
+            <p>No mapping files. No test code changes. No local state. Fully stateless.</p>
+        </div>
+    </div>
+    <aside class="notes">
+        The tool extracts a stable identifier from each test result — Allure content hash, JUnit classname.name, or ExtentReports test name. It searches Spira for a TC with that ID in a custom property. If found, reuses it. If not, creates it. Next run finds the same TC automatically.
+    </aside>
+</section>
+
+<!-- Zero Friction -->
+<section>
+    <h2>Zero Friction</h2>
+    <div class="grid-2" style="grid-template-columns: 1fr 1fr;">
+        <div class="tile">
+            <h3>Customer Changes</h3>
+            <p style="font-size: 1.2em; color: #f58220; font-weight: 700;">Nothing.</p>
+            <p>No test code modifications. No framework plugins. No mapping files.</p>
+        </div>
+        <div class="tile">
+            <h3>Pipeline Setup</h3>
+            <p style="font-size: 0.7em; font-family: monospace; color: #94a3b8; line-height: 1.6;">
+                SPIRA_URL=...<br>
+                SPIRA_PROJECT_ID=25<br>
+                SPIRA_RELEASE_ID=155<br>
+                spira-report
+            </p>
+        </div>
+    </div>
+    <aside class="notes">
+        Shared config at the GitLab group level. Each project only needs project ID, release ID, and results directory. Three variables per project.
+    </aside>
+</section>
+
+<!-- What Lands in Spira -->
+<section>
+    <h2>What Lands in Spira</h2>
+    <ul>
+        <li class="fragment"><strong>Test Cases</strong> &mdash; auto-created with automation ID</li>
+        <li class="fragment"><strong>Test Runs</strong> &mdash; pass/fail, timestamps, errors, stack traces</li>
+        <li class="fragment"><strong>Evidence</strong> &mdash; screenshots, videos, logs as attachments</li>
+        <li class="fragment"><strong>Execution History</strong> &mdash; same TC reused across pipeline runs</li>
+        <li class="fragment"><strong>Release Traceability</strong> &mdash; runs linked to configured release</li>
+    </ul>
+</section>
+
+<!-- In Production -->
+<section>
+    <h2>In Production</h2>
+    <div class="tile" style="max-width: 700px; margin: 0 auto;">
+        <h3 style="color: #f58220;">Large Financial Services Organisation</h3>
+        <p><strong>Frameworks:</strong> Selenium/TestNG + Cypress/Allure</p>
+        <p><strong>Pipeline:</strong> GitLab CI/CD</p>
+        <p><strong>Result:</strong> Automated test results flowing to Spira from both frameworks, with screenshots and evidence, zero changes to test code.</p>
+    </div>
+</section>
+
+<!-- What's Next -->
+<section>
+    <h2>What's Next</h2>
+    <div class="grid-2" style="grid-template-columns: 1fr 1fr;">
+        <div class="tile fragment">
+            <h3>More Parsers</h3>
+            <p>NUnit, Robot Framework, pytest native, Cucumber Messages</p>
+        </div>
+        <div class="tile fragment">
+            <h3>Shared Config</h3>
+            <p>Reduce per-project setup to near-zero</p>
+        </div>
+        <div class="tile fragment">
+            <h3>Closed Loop</h3>
+            <p>Spira-triggered pipeline execution via API</p>
+        </div>
+        <div class="tile fragment">
+            <h3>Distribution</h3>
+            <p>PyPI publication, Docker image</p>
+        </div>
+    </div>
+</section>
+
+<!-- Close -->
+<section class="center" style="text-align: center;" data-background-gradient="linear-gradient(to bottom, #fdb913 0%, #fdb913 30%, #f58220 55%, #1b2a4a 80%, #0f172a 100%)">
+    <div style="transform: translateY(-40px);">
+        <img src="https://www.inflectra.com/Images/Media-Kit/inflectra-logo-transparent.png" alt="Inflectra" class="center-logo" style="margin-bottom: 60px !important;">
+        <h2 style="border: none; padding: 0; text-align: center; color: #f8fafc; text-shadow: 0 1px 4px rgba(0,0,0,0.3);">Questions?</h2>
+        <p style="font-size: 1.1em; color: #fdb913; text-shadow: 0 1px 4px rgba(0,0,0,0.3);">Any Framework. Any Pipeline. Zero Code Changes.</p>
+        <p style="font-size: 0.8em; font-family: monospace; margin-top: 20px; color: #f8fafc;">github.com/dermotcanniffe/SpiraUniversalReporter</p>
+    </div>
+</section>
+
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/reveal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.0.4/plugin/notes/notes.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+        Reveal.initialize({
+            width: 1280, height: 720, margin: 0.12,
+            minScale: 0.2, maxScale: 2.0,
+            hash: true, controls: true, progress: true, center: true,
+            transition: 'fade',
+            plugins: [RevealNotes]
+        }).then(() => {
+            document.querySelectorAll('.mermaid').forEach((el, i) => {
+                mermaid.render('mermaid-' + i, el.textContent).then(({svg}) => { el.innerHTML = svg; });
+            });
+        });
+    </script>
+</body>
+</html>
