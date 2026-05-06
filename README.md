@@ -24,7 +24,7 @@ flowchart TD
     C -->|.json| E[Allure JSON Parser]
     C -->|directory| F[ExtentReports HTML Parser]
     D --> G[Extract Results & Evidence]
-    E --> G
+    E --> GThere
     F --> G
     G --> H[Match to Spira Test Cases]
     H --> I[Create Test Runs]
