@@ -60,4 +60,4 @@ spira-report --preflight           # validate setup without sending results
 
 ## License
 
-Internal tool -- not for public distribution.
+MIT License — open source, free to use and distribute.
