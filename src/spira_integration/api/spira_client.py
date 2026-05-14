@@ -312,7 +312,6 @@ class SpiraAPIClient:
             "Description": f"Auto-created test set from CI/CD integration at {datetime.now().isoformat()}",
             "TestSetStatusId": 1,  # Not Started
             "AutomationHostId": None,
-            "PlannedDate": None,
             "CreatorId": None,
             "OwnerId": None,
         }
@@ -391,12 +390,15 @@ class SpiraAPIClient:
         
         execution_status_id = status_map.get(result.status, 3)  # Default to N/A
         
+        from datetime import datetime as _dt
+        now = _dt.now()
+
         # Build request payload
         payload = {
             "TestRunFormatId": 2,  # Automated test run
             "RunnerAssertCount": 0,
-            "StartDate": result.start_time.isoformat() if result.start_time else None,
-            "EndDate": result.end_time.isoformat() if result.end_time else None,
+            "StartDate": result.start_time.isoformat() if result.start_time else now.isoformat(),
+            "EndDate": result.end_time.isoformat() if result.end_time else now.isoformat(),
             "RunnerName": "CI/CD Integration Script",
             "RunnerTestName": result.name,
             "RunnerMessage": result.error_message or "Test completed",
