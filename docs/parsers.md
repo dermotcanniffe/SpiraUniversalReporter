@@ -7,8 +7,10 @@ The tool auto-detects the format by asking each registered parser's `can_parse()
 | Format | Detection | Source Frameworks |
 |--------|-----------|-------------------|
 | Allure JSON | `.json` file with `uuid` + `status` fields | Cypress, Playwright, pytest |
-| JUnit XML | `.xml` file with `<testsuite>` root element | TestNG, Maven Surefire, Gradle |
-| ExtentReports HTML | Directory containing `Summary.html` | Selenium, custom Java frameworks |
+| JUnit XML | `.xml` file with `<testsuite>` root element | Any tool producing JUnit XML: TestNG, Maven Surefire, Maven Failsafe, Gradle, pytest, NUnit, Go, Ant, etc. |
+| ExtentReports HTML | Directory containing ExtentReports HTML markers | Selenium, custom Java frameworks |
+
+**Note:** Detection is based on file content, not filenames or directory names. The JUnit parser recursively searches subdirectories for XML files, so it works regardless of how your build tool organises its output.
 
 ## What's Extracted Per Format
 
