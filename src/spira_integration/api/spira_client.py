@@ -355,7 +355,8 @@ class SpiraAPIClient:
         test_case_id: int,
         result: TestResult,
         test_set_id: int = None,
-        test_set_test_case_id: int = None
+        test_set_test_case_id: int = None,
+        release_id: int = None
     ) -> int:
         """
         Create a test run in Spira.
@@ -411,6 +412,8 @@ class SpiraAPIClient:
             payload["TestSetId"] = test_set_id
         if test_set_test_case_id:
             payload["TestSetTestCaseId"] = test_set_test_case_id
+        if release_id:
+            payload["ReleaseId"] = release_id
         
         headers = {
             'Accept': 'application/json',

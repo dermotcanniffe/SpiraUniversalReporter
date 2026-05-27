@@ -74,25 +74,49 @@ class ExtentParser(TestResultParser):
         return self._parse_summary(summary, report_dir)
 
     def _find_summary(self, directory: Path) -> Optional[Path]:
-        """Locate Summary.html, searching up to 2 levels deep."""
-        # Direct child
-        candidate = directory / 'Summary.html'
-        if candidate.exists():
-            return candidate
+        """Locate ExtentReports summary HTML, searching up to 2 levels deep."""
+        # Look for Summary.html first (standard name)
+        for name in ['Summary.html', 'summary.html', 'Report.html', 'report.html',
+                     'ExtentReport.html', 'extent-report.html', 'index.html']:
+            candidate = directory / name
+            if candidate.exists():
+                if self._is_extent_html(candidate):
+                    return candidate
 
-        # One level deeper (e.g. Result/Report_<ts>/Summary.html)
+        # Search one level deeper
         for child in directory.iterdir():
             if child.is_dir():
-                candidate = child / 'Summary.html'
-                if candidate.exists():
-                    return candidate
-                # Two levels (Result/Report_<ts>/Summary.html)
+                for name in ['Summary.html', 'summary.html', 'Report.html', 'report.html',
+                             'ExtentReport.html', 'extent-report.html', 'index.html']:
+                    candidate = child / name
+                    if candidate.exists():
+                        if self._is_extent_html(candidate):
+                            return candidate
+                # Two levels deep
                 for grandchild in child.iterdir():
                     if grandchild.is_dir():
-                        candidate = grandchild / 'Summary.html'
-                        if candidate.exists():
-                            return candidate
+                        for name in ['Summary.html', 'summary.html', 'Report.html',
+                                     'report.html', 'ExtentReport.html', 'index.html']:
+                            candidate = grandchild / name
+                            if candidate.exists():
+                                if self._is_extent_html(candidate):
+                                    return candidate
+
+        # Last resort: find any HTML file with ExtentReports markers
+        for html_file in directory.rglob('*.html'):
+            if self._is_extent_html(html_file):
+                return html_file
+
         return None
+
+    def _is_extent_html(self, path: Path) -> bool:
+        """Check if an HTML file is an ExtentReports report."""
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read(3000)
+            return 'extent' in content.lower() and ('test-collection' in content or 'node-name' in content)
+        except Exception:
+            return False
 
     def _parse_summary(self, summary_path: Path, report_dir: Path) -> List[TestResult]:
         """Parse the Summary.html to extract all test case results."""

@@ -312,7 +312,8 @@ def run(results_path=None):
             run_id = client.create_test_run(
                 project_id, tc_id, result,
                 test_set_id=test_set_id if tstc_id else None,
-                test_set_test_case_id=tstc_id
+                test_set_test_case_id=tstc_id,
+                release_id=release_id
             )
             summary.successful_uploads += 1
             status = "✓" if result.status.name == "PASSED" else "✗"
