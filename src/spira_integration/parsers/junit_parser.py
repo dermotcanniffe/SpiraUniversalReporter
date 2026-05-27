@@ -17,14 +17,14 @@ class JUnitParser(TestResultParser):
     format_name = 'junit-xml'
 
     def can_parse(self, file_path: str) -> bool:
-        """Detect JUnit XML — a single file or a directory containing XML files."""
+        """Detect JUnit XML — a single file or a directory containing XML files (recursive)."""
         path = Path(file_path)
 
         if path.is_file() and path.suffix == '.xml':
             return self._is_junit_xml(path)
 
         if path.is_dir():
-            return any(self._is_junit_xml(f) for f in path.glob('*.xml'))
+            return any(self._is_junit_xml(f) for f in path.rglob('*.xml'))
 
         return False
 
@@ -56,10 +56,10 @@ class JUnitParser(TestResultParser):
             raise ParseError(f"Path does not exist: {file_path}")
 
     def _parse_directory(self, directory: Path) -> List[TestResult]:
-        """Parse all JUnit XML files in a directory."""
+        """Parse all JUnit XML files in a directory, recursively."""
         import logging
         xml_files = sorted([
-            f for f in directory.glob('*.xml')
+            f for f in directory.rglob('*.xml')
             if self._is_junit_xml(f)
         ])
 
