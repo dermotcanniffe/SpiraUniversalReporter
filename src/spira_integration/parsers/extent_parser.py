@@ -32,43 +32,45 @@ class ExtentParser(TestResultParser):
     format_name = 'extent-html'
 
     def can_parse(self, file_path: str) -> bool:
-        """Detect ExtentReports by Summary.html presence or HTML content markers."""
+        """Detect ExtentReports by Summary.html presence, HTML content markers, or file detection."""
         path = Path(file_path)
         if path.is_dir():
             return self._find_summary(path) is not None
         if path.is_file() and path.suffix == '.html':
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    content = f.read(2000)
-                return 'extent' in content.lower() and 'test-collection' in content
-            except Exception:
-                return False
+            return self._is_extent_html(path)
         return False
 
     def parse(self, file_path: str) -> List[TestResult]:
         """
-        Parse ExtentReports results from a report directory or Summary.html.
+        Parse ExtentReports results from a report directory or HTML report file.
         
         Args:
-            file_path: Path to Summary.html or the report directory containing it
+            file_path: Path to an ExtentReports HTML file (index.html, Summary.html, etc.)
+                       or a directory containing ExtentReports output
             
         Returns:
             List of TestResult objects
         """
         path = Path(file_path)
 
-        # Accept either the Summary.html directly or a directory containing it
+        # Accept a direct HTML file path
+        if path.is_file() and path.suffix == '.html':
+            if self._is_extent_html(path):
+                report_dir = path.parent
+                return self._parse_summary(path, report_dir)
+            else:
+                raise ParseError(
+                    f"File does not appear to be an ExtentReports HTML file: {file_path}"
+                )
+
+        # Accept a directory — look for the ExtentReports HTML file within
         if path.is_dir():
             summary = self._find_summary(path)
-        elif path.is_file() and path.name.lower() == 'summary.html':
-            summary = path
         else:
-            raise ParseError(
-                f"Expected a directory or Summary.html, got: {file_path}"
-            )
+            raise ParseError(f"Path does not exist or is not supported: {file_path}")
 
         if not summary or not summary.exists():
-            raise ParseError(f"Summary.html not found in {file_path}")
+            raise ParseError(f"No ExtentReports HTML file (Summary.html) found in {file_path}")
 
         report_dir = summary.parent
         return self._parse_summary(summary, report_dir)
@@ -113,26 +115,56 @@ class ExtentParser(TestResultParser):
         """Check if an HTML file is an ExtentReports report."""
         try:
             with open(path, 'r', encoding='utf-8') as f:
-                content = f.read(3000)
-            return 'extent' in content.lower() and ('test-collection' in content or 'node-name' in content)
+                content = f.read(5000)
+            content_lower = content.lower()
+            
+            # Check for ExtentReports markers across multiple versions:
+            # v3: 'extent' + 'test-collection' or 'node-name'
+            # v4/v5 (Spark): 'extent' + 'test-detail' or 'extent-' classes
+            # Generic: CDN references to extent-framework
+            if 'extent' not in content_lower:
+                return False
+            
+            extent_markers = [
+                'test-collection',      # v3 marker
+                'node-name',            # v3 marker
+                'extent-framework',     # CDN reference (any version)
+                'extentreports',        # common class/reference
+                'extent.css',           # v3 stylesheet
+                'extent.js',            # v3 script
+                'spark-style.css',      # v5 Spark stylesheet  
+                'test-detail',          # v4/v5 marker
+                'extent-content',       # v5 content container
+                'data-activates',       # Materialize-based Extent v3/v4
+            ]
+            return any(marker in content_lower or marker in content for marker in extent_markers)
         except Exception:
             return False
 
     def _parse_summary(self, summary_path: Path, report_dir: Path) -> List[TestResult]:
-        """Parse the Summary.html to extract all test case results."""
+        """Parse the ExtentReports HTML to extract all test case results."""
         try:
             with open(summary_path, 'r', encoding='utf-8') as f:
                 soup = BeautifulSoup(f.read(), 'html.parser')
         except Exception as e:
-            raise ParseError(f"Failed to read Summary.html: {e}")
+            raise ParseError(f"Failed to read ExtentReports HTML: {e}")
 
         test_results = []
 
-        # Each leaf test case is an <li> with class 'node' and 'leaf'
+        # Strategy 1: v3 format — leaf nodes with status attribute
         nodes = soup.select('li.node.leaf')
         if not nodes:
-            # Fallback: try top-level test items
+            # Strategy 2: v3 top-level test items
             nodes = soup.select('li.test')
+        if not nodes:
+            # Strategy 3: v5 Spark format — test rows in table or test-detail divs
+            nodes = soup.select('div.test-detail')
+        if not nodes:
+            # Strategy 4: v5 Spark test list items
+            nodes = soup.select('li.test-item')
+        if not nodes:
+            # Strategy 5: Any li with a status attribute that looks like a test
+            nodes = soup.select('li[status]')
 
         for node in nodes:
             result = self._parse_node(node, report_dir)
@@ -140,20 +172,38 @@ class ExtentParser(TestResultParser):
                 test_results.append(result)
 
         if not test_results:
-            raise ParseError("No test results found in Summary.html")
+            raise ParseError(
+                f"No test results found in ExtentReports HTML: {summary_path.name}. "
+                f"The HTML structure may be from an unsupported ExtentReports version. "
+                f"Please provide the Summary.html or index.html from your ExtentReports output."
+            )
 
         logger.info(f"Parsed {len(test_results)} test results from ExtentReports")
         return test_results
 
     def _parse_node(self, node, report_dir: Path) -> Optional[TestResult]:
-        """Parse a single test node from the HTML."""
+        """Parse a single test node from the HTML (supports v3 and v5 formats)."""
         try:
-            # Test name
-            name_el = node.select_one('.node-name') or node.select_one('.test-name')
+            # Test name (try multiple selectors across versions)
+            name_el = (
+                node.select_one('.node-name') or
+                node.select_one('.test-name') or
+                node.select_one('.name') or
+                node.select_one('span.test-name') or
+                node.select_one('.test-detail-name')
+            )
+            if not name_el:
+                # Try the collapsible-header > div for v3
+                name_el = node.select_one('.collapsible-header .node-name')
             name = name_el.get_text(strip=True) if name_el else 'Unknown Test'
 
-            # Status
+            # Status — try attribute first, then CSS class
             status_attr = node.get('status', '')
+            if not status_attr:
+                # Look for status in child elements
+                status_el = node.select_one('.test-status') or node.select_one('[status]')
+                if status_el:
+                    status_attr = status_el.get('status', '') or status_el.get_text(strip=True)
             status = self._map_status(status_attr)
 
             # Timestamps
@@ -163,7 +213,7 @@ class ExtentParser(TestResultParser):
             )
 
             # Duration
-            duration_el = node.select_one('.node-duration')
+            duration_el = node.select_one('.node-duration') or node.select_one('.time-taken')
             duration = self._parse_duration(
                 duration_el.get_text(strip=True) if duration_el else None
             )

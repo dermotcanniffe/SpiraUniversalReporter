@@ -8,7 +8,7 @@ The tool auto-detects the format by asking each registered parser's `can_parse()
 |--------|-----------|-------------------|
 | Allure JSON | `.json` file with `uuid` + `status` fields | Cypress, Playwright, pytest |
 | JUnit XML | `.xml` file with `<testsuite>` root element | Any tool producing JUnit XML: TestNG, Maven Surefire, Maven Failsafe, Gradle, pytest, NUnit, Go, Ant, etc. |
-| ExtentReports HTML | Directory containing ExtentReports HTML markers | Selenium, custom Java frameworks |
+| ExtentReports HTML | Directory containing ExtentReports HTML markers (v3, v4, v5/Spark) | Selenium, custom Java frameworks |
 
 **Note:** Detection is based on file content, not filenames or directory names. The JUnit parser recursively searches subdirectories for XML files, so it works regardless of how your build tool organises its output.
 
@@ -41,15 +41,25 @@ The tool auto-detects the format by asking each registered parser's `can_parse()
 
 ### ExtentReports HTML
 
+The parser supports multiple ExtentReports versions (v3, v4, v5/Spark) by trying several HTML structures in sequence:
+
+1. **v3 leaf nodes** — `li.node.leaf` elements with a `status` attribute
+2. **v3 top-level tests** — `li.test` elements (fallback for flat reports)
+3. **v5 Spark detail divs** — `div.test-detail` elements
+4. **v5 Spark list items** — `li.test-item` elements
+5. **Generic status nodes** — any `li[status]` element
+
 | Field | Source |
 |-------|--------|
-| Test name | `div.node-name` in `li.node.leaf` elements |
-| Status | `status` attribute on `li.node` (pass/fail/fatal/error/warning/skip) |
+| Test name | `div.node-name` in matched elements |
+| Status | `status` attribute on node (pass/fail/fatal/error/warning/skip) |
 | Start time | `span.node-time` (format: `MMM d, yyyy hh:mm:ss a`) |
 | Duration | `span.node-duration` (format: `0h 0m 56s+560ms`) |
 | Error message | `td.step-details` from failed step rows |
 | Evidence files | `Screenshots/*.png` and `ConsolidatedScreenshots/*.docx` in per-test directories |
 | Automation ID | Test name from HTML node |
+
+If no test results can be extracted, the parser raises a descriptive error identifying the file it attempted to parse and suggests providing the `Summary.html` or `index.html` from your ExtentReports output.
 
 ## Adding a Custom Parser
 

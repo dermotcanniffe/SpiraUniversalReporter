@@ -56,7 +56,7 @@ class JUnitParser(TestResultParser):
             raise ParseError(f"Path does not exist: {file_path}")
 
     def _parse_directory(self, directory: Path) -> List[TestResult]:
-        """Parse all JUnit XML files in a directory, recursively."""
+        """Parse all JUnit XML files in a directory, recursively, with deduplication."""
         import logging
         xml_files = sorted([
             f for f in directory.rglob('*.xml')
@@ -74,7 +74,56 @@ class JUnitParser(TestResultParser):
             except ParseError as e:
                 logging.getLogger(__name__).warning(f"Skipping {xml_file.name}: {e}")
 
-        return all_results
+        # Deduplicate: surefire/TestNG directories often contain the same test
+        # in multiple XML files (e.g. TEST-TestSuite.xml wraps TEST-ClassName.xml,
+        # or testng-results.xml duplicates individual TEST-*.xml files).
+        # Keep the last occurrence per unique test key (classname.name) since
+        # aggregate files tend to be parsed last and have the most complete data.
+        return self._deduplicate_results(all_results)
+
+    def _deduplicate_results(self, results: List[TestResult]) -> List[TestResult]:
+        """
+        Remove duplicate test results based on normalized key.
+        
+        When the same test appears in multiple XML files (common in surefire/TestNG),
+        keep only the last occurrence per unique key. Uses the short class name
+        (without package prefix) to handle cases where different XML files use
+        different classname formats (e.g. junitreports/ may omit the package).
+        """
+        import logging
+        seen = {}  # normalized_key -> (index, result)
+        for i, result in enumerate(results):
+            key = self._build_dedup_key(result)
+            seen[key] = (i, result)
+
+        deduped = [r for _, r in sorted(seen.values(), key=lambda x: x[0])]
+        removed = len(results) - len(deduped)
+        if removed > 0:
+            logging.getLogger(__name__).info(
+                f"Deduplicated {removed} duplicate test result(s) "
+                f"({len(results)} -> {len(deduped)})"
+            )
+        return deduped
+
+    def _build_dedup_key(self, result: TestResult) -> str:
+        """
+        Build a normalized deduplication key for a test result.
+        
+        Uses short class name (last segment only) + method name to ensure
+        that the same test with different package prefixes is recognized as
+        a duplicate. For example:
+            'demothreearithmetictest.DemoThreeAddSubTest.demoThreeAddition'
+            'DemoThreeAddSubTest.demoThreeAddition'
+        Both normalize to: 'DemoThreeAddSubTest.demoThreeAddition'
+        """
+        if result.raw_data:
+            classname = result.raw_data.get('classname', '')
+            name = result.raw_data.get('name', '')
+            if classname and name:
+                # Use only the short class name (last segment after final dot)
+                short_class = classname.rsplit('.', 1)[-1] if '.' in classname else classname
+                return f"{short_class}.{name}"
+        return result.name
 
     def _parse_file(self, file_path: Path) -> List[TestResult]:
         """Parse a single JUnit XML file."""
@@ -194,11 +243,14 @@ class JUnitParser(TestResultParser):
         self, testcase: ET.Element, results_dir: Path
     ) -> List[str]:
         """
-        Extract evidence file paths from system-out and system-err.
+        Extract evidence file paths from system-out, system-err, and adjacent directories.
 
-        Looks for lines matching:
+        Looks for:
+        1. Lines in system-out/system-err matching:
             EVIDENCE: path/to/file.png
             [[ATTACHMENT|path/to/file.png]]
+        2. Screenshot/image files in sibling directories named after the test class
+           (common in TestNG + screenshot capture frameworks)
         """
         evidence_files = []
         pattern = re.compile(
@@ -216,7 +268,104 @@ class JUnitParser(TestResultParser):
                     evidence_path = results_dir / path_str
                     evidence_files.append(str(evidence_path))
 
+        # Auto-discover evidence from adjacent screenshot directories
+        # Common patterns: screenshots/, Screenshots/, images/, evidence/
+        if not evidence_files:
+            classname = testcase.get('classname', '')
+            name = testcase.get('name', '')
+            evidence_files.extend(
+                self._discover_adjacent_evidence(results_dir, classname, name)
+            )
+
         return evidence_files
+
+    def _discover_adjacent_evidence(
+        self, results_dir: Path, classname: str, test_name: str
+    ) -> List[str]:
+        """
+        Discover screenshot/evidence files in adjacent directories.
+        
+        Searches for image/video files using multiple strategies:
+        1. Named evidence directories (screenshots/, images/, evidence/) with files
+           matching the test class or test name in their filename.
+        2. Per-test subdirectories whose name matches the test class or method,
+           collecting ALL image/video files within (handles sequentially numbered
+           screenshots like '1_Element Validation.png').
+        3. TestNG-style output directories (test-output/) with matching files.
+        """
+        evidence = []
+        evidence_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.mp4', '.avi', '.webm'}
+        
+        # Build search terms from classname and test name
+        search_terms = []
+        if classname:
+            # Use short class name (last segment)
+            short_class = classname.rsplit('.', 1)[-1] if '.' in classname else classname
+            search_terms.append(short_class.lower())
+        if test_name:
+            search_terms.append(test_name.lower())
+        
+        # Also check parent directory (results may be in target/surefire-reports)
+        search_roots = [results_dir, results_dir.parent]
+        
+        # Track seen paths to avoid duplicates (important on case-insensitive filesystems)
+        seen_paths = set()
+        
+        # Strategy 1: Look for per-test subdirectories whose name matches
+        # the test class or method. When found, collect ALL evidence files inside.
+        # This handles structures like:
+        #   Web_TC01_<timestamp>/Screenshots/*.png
+        #   DemoThreeAddSubTest/screenshots/*.png
+        for root in search_roots:
+            if not root.exists():
+                continue
+            for item in root.iterdir():
+                if not item.is_dir():
+                    continue
+                dir_lower = item.name.lower()
+                if any(term in dir_lower for term in search_terms if term):
+                    # This directory matches the test — collect all evidence files
+                    for f in sorted(item.rglob('*')):
+                        if f.is_file() and f.suffix.lower() in evidence_extensions:
+                            resolved = str(f.resolve())
+                            if resolved not in seen_paths:
+                                seen_paths.add(resolved)
+                                evidence.append(str(f))
+        
+        if evidence:
+            return evidence
+        
+        # Strategy 2: Common evidence directory names with filename matching
+        evidence_dirs = ['screenshots', 'Screenshots', 'images', 'evidence',
+                         'test-output']
+        
+        checked_dirs = set()
+        for root in search_roots:
+            if not root.exists():
+                continue
+            for dir_name in evidence_dirs:
+                evidence_dir = root / dir_name
+                if not evidence_dir.exists() or not evidence_dir.is_dir():
+                    continue
+                # Avoid checking the same dir twice (case-insensitive FS)
+                resolved_dir = str(evidence_dir.resolve())
+                if resolved_dir in checked_dirs:
+                    continue
+                checked_dirs.add(resolved_dir)
+                
+                for f in sorted(evidence_dir.rglob('*')):
+                    if f.is_file() and f.suffix.lower() in evidence_extensions:
+                        # Check if file or its parent directory relates to this test
+                        fname_lower = f.stem.lower()
+                        parent_lower = f.parent.name.lower()
+                        if any(term in fname_lower or term in parent_lower
+                               for term in search_terms if term):
+                            resolved = str(f.resolve())
+                            if resolved not in seen_paths:
+                                seen_paths.add(resolved)
+                                evidence.append(str(f))
+        
+        return evidence
 
     def _parse_iso_timestamp(self, value: Optional[str]) -> Optional[datetime]:
         """Parse ISO 8601 timestamp from testsuite/testsuites attributes."""
