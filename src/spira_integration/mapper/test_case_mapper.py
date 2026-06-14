@@ -128,6 +128,11 @@ class TestCaseMapper:
             logger.debug(f"Using JUnit classname.name as automation ID: {junit_key}")
             return junit_key
         
+        # ExtentReports / generic fallback: use name alone
+        if name:
+            logger.debug(f"Using test name as automation ID: {name}")
+            return name
+        
         return None
 
     def get_test_case_id(self, test_name: str) -> Optional[int]:
