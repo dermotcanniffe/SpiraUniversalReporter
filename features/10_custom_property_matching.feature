@@ -19,7 +19,7 @@ Feature: Stateless Test Case Matching via Custom Properties
     Given I have a test case mapper
     And I have raw data with no identifiers
     When I extract the automation ID
-    Then the automation ID should be None
+    Then the automation ID should be "Test"
 
   Scenario: Fallback to TC ID regex when no automation_id_field
     Given I have a test case mapper

@@ -197,13 +197,23 @@ class ExtentParser(TestResultParser):
                 name_el = node.select_one('.collapsible-header .node-name')
             name = name_el.get_text(strip=True) if name_el else 'Unknown Test'
 
-            # Status — try attribute first, then CSS class
+            # Status — try attribute first, then CSS class, then text content
             status_attr = node.get('status', '')
             if not status_attr:
                 # Look for status in child elements
                 status_el = node.select_one('.test-status') or node.select_one('[status]')
                 if status_el:
                     status_attr = status_el.get('status', '') or status_el.get_text(strip=True)
+            if not status_attr:
+                # Try extracting from CSS classes (e.g. class="node level-1 leaf fail")
+                node_classes = node.get('class', [])
+                if isinstance(node_classes, str):
+                    node_classes = node_classes.split()
+                status_keywords = {'pass', 'fail', 'fatal', 'error', 'warning', 'skip', 'info'}
+                for cls in node_classes:
+                    if cls.lower() in status_keywords:
+                        status_attr = cls.lower()
+                        break
             status = self._map_status(status_attr)
 
             # Timestamps
@@ -255,14 +265,21 @@ class ExtentParser(TestResultParser):
         """Map ExtentReports status string to TestStatus enum."""
         status_map = {
             'pass': TestStatus.PASSED,
+            'passed': TestStatus.PASSED,
             'fail': TestStatus.FAILED,
+            'failed': TestStatus.FAILED,
             'fatal': TestStatus.FAILED,
             'error': TestStatus.FAILED,
             'warning': TestStatus.CAUTION,
             'skip': TestStatus.SKIPPED,
+            'skipped': TestStatus.SKIPPED,
             'info': TestStatus.PASSED,
         }
-        return status_map.get(extent_status.lower().strip(), TestStatus.BLOCKED)
+        cleaned = extent_status.lower().strip()
+        result = status_map.get(cleaned, TestStatus.BLOCKED)
+        if result == TestStatus.BLOCKED and cleaned:
+            logger.warning(f"Unrecognized ExtentReports status '{extent_status}', defaulting to BLOCKED")
+        return result
 
     def _parse_extent_time(self, time_str: str) -> Optional[datetime]:
         """Parse ExtentReports timestamp like 'Mar 26, 2026 06:55:58 PM'."""
@@ -319,22 +336,40 @@ class ExtentParser(TestResultParser):
     def _find_screenshots(self, test_name: str, report_dir: Path) -> List[str]:
         """Find screenshot files for a test case in the report directory."""
         evidence = []
+        evidence_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.mp4', '.avi', '.webm'}
 
         # Look for directories matching the test name pattern
         # e.g. Web_TC01_26-Mar-26 06-55-56-870/Screenshots/
+        # Match using startswith OR contains (case-insensitive)
+        test_name_lower = test_name.lower()
+        
         for item in report_dir.iterdir():
-            if item.is_dir() and item.name.startswith(test_name):
+            if not item.is_dir():
+                continue
+            item_lower = item.name.lower()
+            if item_lower.startswith(test_name_lower) or test_name_lower in item_lower:
+                # Check for Screenshots subdirectory
                 screenshots_dir = item / 'Screenshots'
+                if not screenshots_dir.exists():
+                    screenshots_dir = item / 'screenshots'
                 if screenshots_dir.exists():
                     for img in sorted(screenshots_dir.iterdir()):
-                        if img.suffix.lower() in ('.png', '.jpg', '.jpeg', '.gif', '.bmp'):
+                        if img.suffix.lower() in evidence_extensions:
                             evidence.append(str(img))
 
                 # Also check for consolidated screenshots doc
                 consolidated = item / 'ConsolidatedScreenshots'
+                if not consolidated.exists():
+                    consolidated = item / 'consolidatedscreenshots'
                 if consolidated.exists():
                     for doc in consolidated.iterdir():
-                        if doc.suffix.lower() in ('.docx', '.pdf'):
+                        if doc.suffix.lower() in ('.docx', '.pdf', '.png', '.jpg', '.jpeg'):
                             evidence.append(str(doc))
+
+                # Check for any evidence files directly in the test directory
+                for f in sorted(item.rglob('*')):
+                    if f.is_file() and f.suffix.lower() in evidence_extensions:
+                        if str(f) not in evidence:
+                            evidence.append(str(f))
 
         return evidence

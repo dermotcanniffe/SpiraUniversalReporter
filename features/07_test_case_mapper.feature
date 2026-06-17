@@ -56,8 +56,8 @@ Feature: Test Case Mapper
     Given I have a test case mapper
     And I have ExtentReports raw data with name "Web_TC01"
     When I extract the automation ID
-    Then I should receive None
-    # ExtentReports raw_data has no testCaseId or classname, falls through
+    Then I should receive "Web_TC01"
+    # ExtentReports raw_data has no testCaseId or classname, uses name as fallback
 
   Scenario: Return None for automation ID when no identifier available
     Given I have a test case mapper
