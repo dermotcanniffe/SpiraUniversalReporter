@@ -276,9 +276,9 @@ class ExtentParser(TestResultParser):
             'info': TestStatus.PASSED,
         }
         cleaned = extent_status.lower().strip()
-        result = status_map.get(cleaned, TestStatus.BLOCKED)
-        if result == TestStatus.BLOCKED and cleaned:
-            logger.warning(f"Unrecognized ExtentReports status '{extent_status}', defaulting to BLOCKED")
+        result = status_map.get(cleaned, TestStatus.CAUTION)
+        if result == TestStatus.CAUTION and cleaned and cleaned not in ('warning',):
+            logger.warning(f"Unrecognized ExtentReports status '{extent_status}', defaulting to CAUTION")
         return result
 
     def _parse_extent_time(self, time_str: str) -> Optional[datetime]:

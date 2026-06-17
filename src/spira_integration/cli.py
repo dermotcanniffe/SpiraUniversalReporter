@@ -317,7 +317,8 @@ def run(results_path=None):
             )
             summary.successful_uploads += 1
             status = "✓" if result.status.name == "PASSED" else "✗"
-            logger.info(f"{status} TC:{tc_id} -> Run #{run_id} [{result.status.name}]")
+            run_url = f"{url.rstrip('/')}/{project_id}/TestRun/{run_id}.aspx"
+            logger.info(f"{status} TC:{tc_id} -> Run #{run_id} [{result.status.name}] {run_url}")
 
             for evidence_path in result.evidence_files:
                 try:
